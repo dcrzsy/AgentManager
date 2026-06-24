@@ -63,6 +63,9 @@ jobs:
               img.resize((size, size), Image.LANCZOS).save(f"{out}/Agent管理器.png")
           PY
 
+          # AppImage requires the icon at AppDir root too
+          cp AppDir/usr/share/icons/hicolor/256x256/apps/Agent管理器.png AppDir/Agent管理器.png
+
           # Build AppImage
           curl -sLO --retry 5 https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage
           chmod +x appimagetool-x86_64.AppImage
