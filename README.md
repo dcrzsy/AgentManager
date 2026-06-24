@@ -22,7 +22,6 @@
 |------|------|
 | Windows | `Agent管理器-windows-x64.exe` |
 | Linux | `Agent管理器-linux-x64` |
-| macOS (Intel) | `Agent管理器-macos-x64.zip` |
 | macOS (Apple Silicon) | `Agent管理器-macos-arm64.zip` |
 
 下载后双击运行，或在终端执行：

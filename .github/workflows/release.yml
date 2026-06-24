@@ -21,9 +21,6 @@ jobs:
           - os: windows-latest
             target: windows-x64
             ext: ".exe"
-          - os: macos-13
-            target: macos-x64
-            ext: ""
           - os: macos-latest
             target: macos-arm64
             ext: ""
@@ -48,7 +45,7 @@ jobs:
           pyinstaller Agent管理器.spec --clean --noconfirm
 
       - name: Rename artifacts (Linux/Windows)
-        if: matrix.os != 'macos-13' && matrix.os != 'macos-latest'
+        if: matrix.os != 'macos-latest'
         shell: bash
         run: |
           mkdir -p dist/release
@@ -59,7 +56,7 @@ jobs:
           fi
 
       - name: Rename artifacts (macOS)
-        if: matrix.os == 'macos-13' || matrix.os == 'macos-latest'
+        if: matrix.os == 'macos-latest'
         run: |
           mkdir -p dist/release
           zip -r dist/release/Agent管理器-${{ matrix.target }}.zip "dist/Agent管理器.app"
