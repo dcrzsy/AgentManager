@@ -1,0 +1,762 @@
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Agent 管理器</title>
+<style>
+* { box-sizing: border-box; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  margin: 0;
+  padding: 20px;
+  background: #f5f5f7;
+  color: #333;
+}
+.container { max-width: 1400px; margin: 0 auto; }
+h1 { margin: 0 0 20px; font-size: 24px; }
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  background: #fff;
+  padding: 16px;
+  border-radius: 12px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+  margin-bottom: 16px;
+}
+.toolbar label { font-size: 14px; color: #666; }
+.toolbar input, .toolbar select {
+  padding: 6px 10px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-size: 14px;
+}
+.toolbar button {
+  padding: 8px 16px;
+  border: none;
+  border-radius: 6px;
+  background: #007aff;
+  color: #fff;
+  font-size: 14px;
+  cursor: pointer;
+}
+.toolbar button:hover { background: #0056b3; }
+.toolbar button.danger { background: #ff3b30; }
+.toolbar button.danger:hover { background: #c62828; }
+.toolbar button.secondary { background: #6c757d; }
+.stats {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+.stat-card {
+  background: #fff;
+  padding: 14px 18px;
+  border-radius: 10px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+  min-width: 140px;
+}
+.stat-card .number { font-size: 22px; font-weight: 600; color: #007aff; }
+.stat-card .label { font-size: 12px; color: #888; margin-top: 4px; }
+.group {
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+  margin-bottom: 16px;
+  overflow: hidden;
+}
+.group-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px;
+  background: #fafafa;
+  border-bottom: 1px solid #eee;
+  font-weight: 600;
+  cursor: pointer;
+  user-select: none;
+}
+.group-header input { width: 18px; height: 18px; }
+.group-header .tool-name { font-size: 16px; }
+.group-header .tool-count { font-size: 13px; color: #888; margin-left: auto; }
+.group-content { display: block; }
+.group-content.collapsed { display: none; }
+.subgroup {
+  border-top: 1px solid #f0f0f0;
+  background: #fff;
+}
+.subgroup-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  background: #fafafb;
+  color: #555;
+  font-size: 13px;
+  cursor: pointer;
+  user-select: none;
+}
+.subgroup-header:hover { background: #f0f0f2; }
+.subgroup-header .dir-name { font-family: monospace; color: #333; }
+.subgroup-header .dir-count { color: #888; margin-left: auto; font-size: 12px; }
+.subgroup-content { display: block; }
+.subgroup-content.collapsed { display: none; }
+table { width: 100%; border-collapse: collapse; }
+th, td {
+  padding: 10px 12px;
+  text-align: left;
+  border-bottom: 1px solid #f0f0f0;
+  font-size: 14px;
+  vertical-align: top;
+}
+th { background: #fafafa; font-weight: 500; color: #666; position: sticky; top: 0; }
+tr:hover { background: #f9f9fb; }
+td:first-child { width: 40px; text-align: center; vertical-align: middle; }
+td input[type="checkbox"] { width: 18px; height: 18px; cursor: pointer; }
+.filename-cell { font-weight: 500; color: #222; font-family: monospace; font-size: 13px; word-break: break-all; }
+.dir-cell { color: #777; font-family: monospace; font-size: 12px; word-break: break-all; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.title-cell { color: #333; font-size: 14px; max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cwd-cell { color: #555; font-family: monospace; font-size: 12px; max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.preview-text { color: #555; font-size: 13px; max-width: 360px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.msg-stats { font-size: 12px; color: #888; white-space: nowrap; }
+.msg-stats span { margin-right: 6px; }
+.msg-stats .u { color: #007aff; }
+.msg-stats .a { color: #34a853; }
+.size { color: #888; font-size: 13px; white-space: nowrap; }
+.mtime { color: #888; font-size: 13px; white-space: nowrap; }
+.file-type { font-size: 12px; color: #007aff; background: #f0f7ff; padding: 2px 6px; border-radius: 4px; }
+.actions button {
+  padding: 5px 10px;
+  border: 1px solid #007aff;
+  background: #fff;
+  color: #007aff;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 13px;
+}
+.actions button:hover { background: #f0f7ff; }
+.empty {
+  padding: 40px;
+  text-align: center;
+  color: #888;
+}
+.loading {
+  padding: 40px;
+  text-align: center;
+  color: #666;
+}
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.5);
+  display: none;
+  justify-content: center;
+  align-items: center;
+  z-index: 100;
+}
+.modal-overlay.active { display: flex; }
+.modal {
+  background: #fff;
+  border-radius: 12px;
+  width: 92%;
+  max-width: 960px;
+  max-height: 88vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+}
+.modal-header {
+  padding: 14px 20px;
+  border-bottom: 1px solid #eee;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+.modal-header h3 { margin: 0; font-size: 17px; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.modal-header button {
+  background: none;
+  border: none;
+  font-size: 24px;
+  cursor: pointer;
+  color: #888;
+}
+.modal-info {
+  display: flex;
+  gap: 16px;
+  padding: 10px 20px;
+  border-bottom: 1px solid #f0f0f0;
+  background: #fafafa;
+  font-size: 13px;
+  color: #666;
+  flex-wrap: wrap;
+}
+.modal-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 8px 20px 0;
+  border-bottom: 1px solid #eee;
+}
+.modal-tab {
+  padding: 8px 14px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-size: 14px;
+  color: #666;
+  border-bottom: 2px solid transparent;
+}
+.modal-tab.active { color: #007aff; border-bottom-color: #007aff; font-weight: 500; }
+.modal-search {
+  padding: 10px 20px;
+  border-bottom: 1px solid #f0f0f0;
+}
+.modal-search input {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-size: 14px;
+}
+.modal-body {
+  padding: 16px 20px;
+  overflow: auto;
+  flex: 1;
+  background: #f9f9fb;
+}
+.modal-body pre {
+  background: #fff;
+  padding: 16px;
+  border-radius: 8px;
+  overflow: auto;
+  font-size: 13px;
+  line-height: 1.5;
+  border: 1px solid #eee;
+}
+.chat-message {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 14px;
+  max-width: 88%;
+}
+.chat-message.user { align-items: flex-end; margin-left: auto; }
+.chat-message.assistant { align-items: flex-start; }
+.chat-bubble {
+  padding: 10px 14px;
+  border-radius: 14px;
+  font-size: 14px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.06);
+}
+.chat-message.user .chat-bubble { background: #007aff; color: #fff; border-bottom-right-radius: 4px; }
+.chat-message.assistant .chat-bubble { background: #fff; color: #333; border: 1px solid #e5e5e5; border-bottom-left-radius: 4px; }
+.chat-message .meta {
+  font-size: 11px;
+  color: #999;
+  margin-top: 4px;
+  margin-bottom: 2px;
+}
+.chat-message.user .meta { margin-right: 4px; }
+.chat-message.assistant .meta { margin-left: 4px; }
+.chat-message.collapsed .chat-bubble {
+  max-height: 120px;
+  overflow: hidden;
+  position: relative;
+}
+.chat-message.collapsed .chat-bubble::after {
+  content: "";
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  height: 40px;
+  background: linear-gradient(transparent, rgba(255,255,255,0.9));
+}
+.chat-message.user.collapsed .chat-bubble::after {
+  background: linear-gradient(transparent, rgba(0,122,255,0.85));
+}
+.expand-btn {
+  font-size: 12px;
+  color: #007aff;
+  cursor: pointer;
+  margin-top: 4px;
+}
+.day-divider {
+  text-align: center;
+  margin: 16px 0;
+  font-size: 12px;
+  color: #999;
+  position: relative;
+}
+.day-divider::before {
+  content: "";
+  position: absolute;
+  top: 50%; left: 0; right: 0;
+  height: 1px; background: #e5e5e5;
+}
+.day-divider span { background: #f9f9fb; padding: 0 12px; position: relative; }
+.raw-event {
+  background: #fff;
+  border: 1px solid #eee;
+  border-radius: 8px;
+  padding: 12px;
+  margin-bottom: 10px;
+}
+.raw-event .event-type {
+  font-size: 11px;
+  color: #007aff;
+  background: #f0f7ff;
+  padding: 2px 6px;
+  border-radius: 4px;
+  margin-bottom: 6px;
+  display: inline-block;
+}
+.raw-event pre { background: #f5f5f7; border: none; margin: 0; }
+.toast {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  padding: 12px 20px;
+  border-radius: 8px;
+  color: #fff;
+  font-size: 14px;
+  z-index: 200;
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+.toast.show { opacity: 1; }
+.toast.success { background: #34c759; }
+.toast.error { background: #ff3b30; }
+.notice {
+  background: #fffbe6;
+  border: 1px solid #ffe58f;
+  border-radius: 8px;
+  padding: 12px 16px;
+  margin-bottom: 16px;
+  color: #666;
+  font-size: 14px;
+}
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>🧹 Agent 管理器</h1>
+
+  <div class="toolbar">
+    <label>工具:</label>
+    <select id="toolFilter" multiple size="1">
+      <option value="claude" selected>Claude Code</option>
+      <option value="codex" selected>Codex</option>
+      <option value="orca" selected>Orca</option>
+      <option value="kimi-code" selected>Kimi Code</option>
+      <option value="pi" selected>Pi</option>
+      <option value="hermes" selected>Hermes</option>
+    </select>
+    <label>只显示 N 天前的会话 (0=全部):</label>
+    <input type="number" id="daysOld" value="0" min="0" style="width:70px">
+    <button onclick="loadSessions()">🔍 扫描</button>
+    <input type="text" id="searchInput" placeholder="🔎 模糊搜索标题或创建目录..." style="flex:1;min-width:200px" oninput="applySearch()">
+    <button class="secondary" onclick="selectAll(true)">全选</button>
+    <button class="secondary" onclick="selectAll(false)">取消全选</button>
+    <button class="danger" onclick="deleteSelected()">🗑️ 删除选中</button>
+    <button class="secondary" onclick="cleanupStaleIndex()" title="清理 Kimi/Codex 会话索引中已失效的条目">🧹 清理失效索引</button>
+  </div>
+
+  <div class="stats">
+    <div class="stat-card"><div class="number" id="statTotal">0</div><div class="label">总会话数</div></div>
+    <div class="stat-card"><div class="number" id="statSelected">0</div><div class="label">已选中</div></div>
+    <div class="stat-card"><div class="number" id="statSize">0 MB</div><div class="label">选中大小</div></div>
+  </div>
+
+  <div class="notice" id="notice">
+    第四版：支持 Claude、Codex、Orca、Kimi、Pi、Hermes。Hermes 从 ~/.hermes/state.db 读取；Orca 扫描 ~/.config/orca/codex-runtime-home/home/sessions。缓存/二进制已自动过滤。
+  </div>
+
+  <div id="content">
+    <div class="loading">点击「扫描」加载会话列表</div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="previewModal" onclick="if(event.target===this) closeModal()">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 id="modalTitle">会话预览</h3>
+      <button onclick="closeModal()">&times;</button>
+    </div>
+    <div class="modal-info" id="modalInfo"></div>
+    <div class="modal-tabs">
+      <button class="modal-tab active" onclick="switchTab('conversation')" id="tab-conversation">💬 对话视图</button>
+      <button class="modal-tab" onclick="switchTab('raw')" id="tab-raw">📄 原始数据</button>
+    </div>
+    <div class="modal-search" id="modalSearch">
+      <input type="text" id="previewSearch" placeholder="搜索消息内容..." oninput="filterPreview()">
+    </div>
+    <div class="modal-body" id="modalBody">
+      <div class="loading">加载中...</div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const HOME_DIR = "";
+let allSessions = [];
+let currentPreviewData = null;
+let currentPreviewTab = 'conversation';
+let currentPreviewPath = '';
+
+function showToast(msg, type='success') {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast ' + type + ' show';
+  setTimeout(() => t.classList.remove('show'), 3000);
+}
+
+async function api(path, opts={}) {
+  const res = await fetch(path, opts);
+  if (!res.ok) {
+    let detail = '';
+    try {
+      const errData = await res.json();
+      if (errData && errData.error) detail = ': ' + errData.error;
+    } catch (e) {}
+    throw new Error('HTTP ' + res.status + detail);
+  }
+  return res.json();
+}
+
+function formatSize(bytes) {
+  const units = ['B','KB','MB','GB'];
+  let i=0;
+  while(bytes>=1024 && i<units.length-1){ bytes/=1024; i++; }
+  return bytes.toFixed(1)+' '+units[i];
+}
+
+async function loadSessions() {
+  const tools = Array.from(document.getElementById('toolFilter').selectedOptions).map(o => o.value).join(',');
+  const days = document.getElementById('daysOld').value;
+  const content = document.getElementById('content');
+  content.innerHTML = '<div class="loading">扫描中...</div>';
+  try {
+    const data = await api(`/api/sessions?tools=${tools}&days=${days}`);
+    allSessions = data.sessions || [];
+    applySearch();
+  } catch (e) {
+    content.innerHTML = '<div class="empty">加载失败: ' + e.message + '</div>';
+    showToast('加载失败: ' + e.message, 'error');
+  }
+}
+
+function applySearch() {
+  const q = document.getElementById('searchInput').value.trim().toLowerCase();
+  let filtered = allSessions;
+  if (q) {
+    filtered = allSessions.filter(s => {
+      const title = (s.session_title || s.first_message || '').toLowerCase();
+      const cwd = (s.cwd || s.cwd_human || '').toLowerCase();
+      const filename = (s.filename || '').toLowerCase();
+      const group = (s.session_group || s.dir || '').toLowerCase();
+      return title.includes(q) || cwd.includes(q) || filename.includes(q) || group.includes(q);
+    });
+  }
+  renderGroups(filtered);
+  updateStats();
+}
+
+function renderGroups(sessions) {
+  const content = document.getElementById('content');
+  if (sessions.length === 0) {
+    content.innerHTML = '<div class="empty">没有找到符合条件的会话<br><br>可以尝试把「天龄」调大，或检查 Claude / Codex / Orca / Kimi / Pi / Hermes 的会话位置是否存在。</div>';
+    return;
+  }
+  const byTool = {};
+  sessions.forEach(s => {
+    byTool[s.tool] = byTool[s.tool] || [];
+    byTool[s.tool].push(s);
+  });
+
+  let html = '';
+  for (const [tool, list] of Object.entries(byTool)) {
+    html += `<div class="group" data-tool="${tool}">
+      <div class="group-header" onclick="toggleGroup(this)">
+        <input type="checkbox" onclick="event.stopPropagation();toggleTool('${tool}', this.checked)">
+        <span class="tool-name">${toolName(tool)}</span>
+        <span class="tool-count">${list.length} 项</span>
+      </div>
+      <div class="group-content">
+        <table>
+          <thead>
+            <tr>
+              <th style="width:40px"></th>
+              <th>文件名</th>
+              <th>目录/会话</th>
+              <th>会话标题</th>
+              <th>创建目录</th>
+              <th style="width:90px">对话/事件</th>
+              <th style="width:80px">大小</th>
+              <th style="width:130px">修改时间</th>
+              <th style="width:70px">操作</th>
+            </tr>
+          </thead>
+          <tbody>`;
+    for (const s of list) {
+      const u = s.user_count || 0;
+      const a = s.assistant_count || 0;
+      const c = s.conversation_count || 0;
+      const totalEvents = s.message_count || '-';
+      const title = s.session_title || s.first_message || '-';
+      const cwd = s.cwd_human || s.cwd || '';
+      const hasAux = s.aux_paths && s.aux_paths.length ? ` <span style="color:#bbb">(+${s.aux_paths.length})</span>` : '';
+      html += `<tr data-path="${escapeHtml(s.path)}" data-aux="${escapeHtml((s.aux_paths || []).join(','))}" ${s.session_dir ? `data-session-dir="${escapeHtml(s.session_dir)}"` : ''}>
+        <td><input type="checkbox" class="row-check" onchange="updateStats()"></td>
+        <td class="filename-cell" title="${escapeHtml(s.display_path || s.path)}">${escapeHtml(s.filename || s.path)}${hasAux}</td>
+        <td class="dir-cell" title="${escapeHtml(s.display_path || s.path)}">${escapeHtml(s.session_group || s.dir || '')}</td>
+        <td class="title-cell" title="${escapeHtml(s.first_message || '')}">${escapeHtml(title.length > 60 ? title.slice(0, 60) + '...' : title)}</td>
+        <td class="cwd-cell" title="${escapeHtml(s.cwd || '')}">${escapeHtml(cwd.length > 45 ? cwd.slice(0, 45) + '...' : cwd)}</td>
+        <td class="msg-stats" title="用户 ${u} / 助手 ${a}">
+          ${c ? `<span class="u">👤 ${u}</span><span class="a">🤖 ${a}</span>` : '-'}
+          <span style="color:#bbb">/ ${totalEvents}</span>
+        </td>
+        <td class="size">${s.size_human}</td>
+        <td class="mtime">${s.mtime_human}</td>
+        <td class="actions"><button onclick="previewSession('${encodeURIComponent(s.path)}')">预览</button></td>
+      </tr>`;
+    }
+    html += '</tbody></table></div></div>';
+  }
+  content.innerHTML = html;
+}
+
+function toolName(tool) {
+  const map = {claude:'Claude Code', codex:'Codex', orca:'Orca', 'kimi-code':'Kimi Code', 'kimi-cli':'Kimi CLI', pi:'Pi', hermes:'Hermes'};
+  return map[tool] || tool;
+}
+
+function escapeHtml(s) {
+  if (!s) return '';
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function toggleGroup(header) {
+  const content = header.nextElementSibling;
+  content.classList.toggle('collapsed');
+}
+
+function toggleTool(tool, checked) {
+  const group = document.querySelector(`.group[data-tool="${tool}"]`);
+  group.querySelectorAll('.row-check').forEach(cb => cb.checked = checked);
+  updateStats();
+}
+
+function selectAll(checked) {
+  document.querySelectorAll('.row-check').forEach(cb => cb.checked = checked);
+  document.querySelectorAll('.group-header input[type=checkbox]').forEach(cb => cb.checked = checked);
+  updateStats();
+}
+
+function getSelectedPaths() {
+  return Array.from(document.querySelectorAll('tr[data-path]')).filter(tr => tr.querySelector('.row-check').checked).flatMap(tr => {
+    // Kimi 合并会话：直接删除整个 session_xxx 目录，避免留下空白索引
+    if (tr.dataset.sessionDir) return [tr.dataset.sessionDir];
+    const paths = [tr.dataset.path];
+    if (tr.dataset.aux) paths.push(...tr.dataset.aux.split(',').filter(Boolean));
+    return paths;
+  });
+}
+
+function updateStats() {
+  const selected = getSelectedPaths();
+  const selectedSessions = allSessions.filter(s => {
+    if (selected.includes(s.path)) return true;
+    // Kimi 合并会话按 session_dir 选中
+    if (s.session_dir && selected.includes(s.session_dir)) return true;
+    return false;
+  });
+  const selSize = selectedSessions.reduce((a, s) => a + (s.size || 0), 0);
+  document.getElementById('statTotal').textContent = allSessions.length;
+  document.getElementById('statSelected').textContent = selected.length;
+  document.getElementById('statSize').textContent = formatSize(selSize);
+}
+
+async function deleteSelected() {
+  const paths = getSelectedPaths();
+  if (paths.length === 0) { showToast('请先勾选要删除的会话', 'error'); return; }
+  if (!confirm(`确定删除选中的 ${paths.length} 个会话？此操作不可恢复。`)) return;
+  try {
+    const res = await api('/api/delete', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({paths})
+    });
+    showToast(`已删除 ${res.deleted.length} 个，失败 ${res.failed.length} 个`, res.failed.length ? 'error' : 'success');
+    loadSessions();
+  } catch (e) {
+    showToast('删除失败: ' + e.message, 'error');
+  }
+}
+
+async function cleanupStaleIndex() {
+  try {
+    const res = await api('/api/cleanup-stale-index', {method: 'POST'});
+    const msg = `Kimi ${res.kimi_removed} 条，Codex ${res.codex_removed} 条，Orca ${res.orca_removed} 条`;
+    showToast(msg, (res.kimi_removed + res.codex_removed + res.orca_removed) ? 'success' : 'error');
+    loadSessions();
+  } catch (e) {
+    showToast('清理失败: ' + e.message, 'error');
+  }
+}
+
+async function previewSession(encodedPath) {
+  const path = decodeURIComponent(encodedPath);
+  currentPreviewPath = path;
+  currentPreviewTab = 'conversation';
+  document.getElementById('previewSearch').value = '';
+  document.getElementById('previewModal').classList.add('active');
+  document.getElementById('modalBody').innerHTML = '<div class="loading">加载中...</div>';
+  document.getElementById('modalTitle').textContent = '会话预览';
+  document.getElementById('modalInfo').innerHTML = '';
+  switchTab('conversation');
+  try {
+    const data = await api(`/api/preview?path=${encodeURIComponent(path)}`);
+    currentPreviewData = data;
+    renderPreview(data, path);
+  } catch (e) {
+    document.getElementById('modalBody').innerHTML = '<div class="empty">加载失败: ' + e.message + '</div>';
+  }
+}
+
+function renderPreview(data, path) {
+  const body = document.getElementById('modalBody');
+  if (data.error) {
+    body.innerHTML = '<div class="empty">' + data.error + '</div>';
+    return;
+  }
+  document.getElementById('modalTitle').textContent = (data.filename || path.split('/').pop()) + ' · ' + toolNameByPath(path);
+  const u = data.user_count || 0;
+  const a = data.assistant_count || 0;
+  const info = [
+    '<span>📁 ' + escapeHtml(path) + '</span>',
+    '<span>💾 ' + formatSize(data.size || 0) + '</span>',
+    data.total_lines ? '<span>📋 原始 ' + data.total_lines + ' 条</span>' : '',
+    (u + a) ? '<span>💬 对话 ' + (u + a) + ' 条（用户 ' + u + ' / 助手 ' + a + '）</span>' : ''
+  ].filter(Boolean).join('');
+  document.getElementById('modalInfo').innerHTML = info;
+
+  if (currentPreviewTab === 'conversation') {
+    renderConversation();
+  } else {
+    renderRaw();
+  }
+}
+
+function toolNameByPath(path) {
+  const s = allSessions.find(x => x.path === path);
+  return s ? toolName(s.tool) : '';
+}
+
+function switchTab(tab) {
+  currentPreviewTab = tab;
+  document.querySelectorAll('.modal-tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('tab-' + tab).classList.add('active');
+  if (currentPreviewData) {
+    if (tab === 'conversation') renderConversation();
+    else renderRaw();
+  }
+}
+
+function filterPreview() {
+  if (currentPreviewTab === 'conversation') renderConversation();
+  else renderRaw();
+}
+
+function renderConversation() {
+  const body = document.getElementById('modalBody');
+  if (!currentPreviewData) return;
+  const msgs = currentPreviewData.conversation || [];
+  const q = document.getElementById('previewSearch').value.trim().toLowerCase();
+  const filtered = q ? msgs.filter(m => (m.text || '').toLowerCase().includes(q)) : msgs;
+
+  if (filtered.length === 0) {
+    body.innerHTML = '<div class="empty">' + (q ? '没有匹配的消息' : '没有提取到对话消息') + '</div>';
+    return;
+  }
+
+  let lastDay = '';
+  body.innerHTML = filtered.map((m, idx) => {
+    const role = m.role || 'unknown';
+    const roleClass = ['user','human'].includes(role) ? 'user' : 'assistant';
+    const text = m.text || '';
+    const ts = m.timestamp ? formatTimestamp(m.timestamp) : '';
+    const day = ts ? ts.split(' ')[0] : '';
+    let divider = '';
+    if (day && day !== lastDay) {
+      lastDay = day;
+      divider = `<div class="day-divider"><span>${escapeHtml(day)}</span></div>`;
+    }
+    const needsCollapse = text.length > 800 || text.split('\n').length > 25;
+    const displayText = escapeHtml(text);
+    const bubble = needsCollapse
+      ? `<div class="chat-message ${roleClass} collapsed" data-idx="${idx}">
+           <div class="meta">${escapeHtml(role)} · ${escapeHtml(ts)}</div>
+           <div class="chat-bubble">${displayText}</div>
+           <div class="expand-btn" onclick="toggleExpand(this)">展开 ▼</div>
+         </div>`
+      : `<div class="chat-message ${roleClass}">
+           <div class="meta">${escapeHtml(role)} · ${escapeHtml(ts)}</div>
+           <div class="chat-bubble">${displayText}</div>
+         </div>`;
+    return divider + bubble;
+  }).join('');
+}
+
+function renderRaw() {
+  const body = document.getElementById('modalBody');
+  if (!currentPreviewData) return;
+  const q = document.getElementById('previewSearch').value.trim().toLowerCase();
+  if (currentPreviewData.type === 'jsonl' && Array.isArray(currentPreviewData.data)) {
+    const lines = currentPreviewData.data;
+    const filtered = q
+      ? lines.filter(line => JSON.stringify(line).toLowerCase().includes(q))
+      : lines;
+    body.innerHTML = filtered.map((obj, idx) => {
+      const type = (obj && obj.type) || (obj && obj.payload && obj.payload.type) || 'raw';
+      return `<div class="raw-event">
+        <div class="event-type">#${idx + 1} ${escapeHtml(String(type))}</div>
+        <pre>${escapeHtml(typeof obj === 'object' ? JSON.stringify(obj, null, 2) : String(obj))}</pre>
+      </div>`;
+    }).join('');
+  } else if (currentPreviewData.type === 'json' || currentPreviewData.type === 'hermes') {
+    body.innerHTML = '<pre>' + escapeHtml(JSON.stringify(currentPreviewData.data, null, 2)) + '</pre>';
+  } else {
+    body.innerHTML = '<pre>' + escapeHtml(currentPreviewData.data || '') + '</pre>';
+  }
+}
+
+function toggleExpand(btn) {
+  const msg = btn.parentElement;
+  msg.classList.toggle('collapsed');
+  btn.textContent = msg.classList.contains('collapsed') ? '展开 ▼' : '收起 ▲';
+}
+
+function formatTimestamp(ts) {
+  if (!ts) return '';
+  try {
+    const d = new Date(ts);
+    if (isNaN(d.getTime())) return ts;
+    return d.toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+  } catch (e) {
+    return ts;
+  }
+}
+
+function closeModal() {
+  document.getElementById('previewModal').classList.remove('active');
+}
+
+loadSessions();
+</script>
+</body>
+</html>
