@@ -30,7 +30,7 @@ classifiers = [
 [project.scripts]
 ai-session-manager = "ai_session_manager.app:main"
 ai-sm = "ai_session_manager.app:main"
-Agent管理器 = "ai_session_manager.app:main"
+"Agent管理器" = "ai_session_manager.app:main"
 
 [project.optional-dependencies]
 dev = [
