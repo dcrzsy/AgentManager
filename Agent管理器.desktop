@@ -1,0 +1,9 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Agent管理器
+Comment=Agent 会话与工具管理器
+Exec=Agent管理器
+Icon=Agent管理器
+Categories=Utility;
+Terminal=false

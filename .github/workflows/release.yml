@@ -17,13 +17,10 @@ jobs:
         include:
           - os: ubuntu-latest
             target: linux-x64
-            ext: ""
           - os: windows-latest
             target: windows-x64
-            ext: ".exe"
           - os: macos-latest
             target: macos-arm64
-            ext: ""
 
     runs-on: ${{ matrix.os }}
     steps:
@@ -44,16 +41,42 @@ jobs:
         run: |
           pyinstaller Agent管理器.spec --clean --noconfirm
 
-      - name: Rename artifacts (Linux/Windows)
-        if: matrix.os != 'macos-latest'
+      - name: Build AppImage (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          # Create AppDir
+          mkdir -p AppDir/usr/bin
+          cp dist/Agent管理器 AppDir/usr/bin/
+          mkdir -p AppDir/usr/share/applications
+          cp Agent管理器.desktop AppDir/usr/share/applications/
+          ln -s usr/share/applications/Agent管理器.desktop AppDir/Agent管理器.desktop
+          ln -s usr/bin/Agent管理器 AppDir/AppRun
+
+          # Generate icon sizes
+          python - <<'PY'
+          from PIL import Image
+          import os
+          img = Image.open("assets/icon.png")
+          for size in (16, 32, 48, 64, 128, 256, 512):
+              out = f"AppDir/usr/share/icons/hicolor/{size}x{size}/apps"
+              os.makedirs(out, exist_ok=True)
+              img.resize((size, size), Image.LANCZOS).save(f"{out}/Agent管理器.png")
+          PY
+
+          # Build AppImage
+          curl -sLO --retry 5 https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage
+          chmod +x appimagetool-x86_64.AppImage
+          APPIMAGE_EXTRACT_AND_RUN=1 ./appimagetool-x86_64.AppImage AppDir
+
+          mkdir -p dist/release
+          mv Agent管理器-x86_64.AppImage dist/release/Agent管理器-${{ matrix.target }}.AppImage
+
+      - name: Rename artifacts (Windows)
+        if: matrix.os == 'windows-latest'
         shell: bash
         run: |
           mkdir -p dist/release
-          if [ "${{ matrix.os }}" = "windows-latest" ]; then
-            cp dist/Agent管理器${{ matrix.ext }} dist/release/Agent管理器-${{ matrix.target }}${{ matrix.ext }}
-          else
-            cp dist/Agent管理器 dist/release/Agent管理器-${{ matrix.target }}
-          fi
+          cp dist/Agent管理器.exe dist/release/Agent管理器-${{ matrix.target }}.exe
 
       - name: Rename artifacts (macOS)
         if: matrix.os == 'macos-latest'

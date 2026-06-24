@@ -34,3 +34,4 @@ Thumbs.db
 # Project specific
 *.log
 /tmp/
+appimagetool-x86_64.AppImage

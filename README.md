@@ -21,18 +21,22 @@
 | 平台 | 文件 |
 |------|------|
 | Windows | `Agent管理器-windows-x64.exe` |
-| Linux | `Agent管理器-linux-x64` |
+| Linux | `Agent管理器-linux-x64.AppImage` |
 | macOS (Apple Silicon) | `Agent管理器-macos-arm64.zip` |
 
 下载后双击运行，或在终端执行：
 
 ```bash
-# Linux / macOS
-chmod +x Agent管理器-linux-x64
-./Agent管理器-linux-x64
+# Linux（首次运行需赋予执行权限）
+chmod +x Agent管理器-linux-x64.AppImage
+./Agent管理器-linux-x64.AppImage
 
 # Windows
 Agent管理器-windows-x64.exe
+
+# macOS
+unzip Agent管理器-macos-arm64.zip
+open "Agent管理器.app"
 ```
 
 ### 方式二：通过 pip 安装
