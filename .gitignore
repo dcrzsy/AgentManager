@@ -5,7 +5,6 @@ __pycache__/
 *.so
 .Python
 build/
-!build/Agent管理器.spec
 dev/
 dist/
 *.egg-info/
