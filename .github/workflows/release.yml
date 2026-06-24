@@ -44,14 +44,12 @@ jobs:
           pip install pyinstaller pillow
 
       - name: Build executable
-        working-directory: Agent管理器
         run: |
           pyinstaller build/Agent管理器.spec --clean --noconfirm
 
       - name: Rename artifacts (Linux/Windows)
         if: matrix.os != 'macos-13' && matrix.os != 'macos-latest'
         shell: bash
-        working-directory: Agent管理器
         run: |
           mkdir -p dist/release
           if [ "${{ matrix.os }}" = "windows-latest" ]; then
@@ -62,7 +60,6 @@ jobs:
 
       - name: Rename artifacts (macOS)
         if: matrix.os == 'macos-13' || matrix.os == 'macos-latest'
-        working-directory: Agent管理器
         run: |
           mkdir -p dist/release
           zip -r dist/release/Agent管理器-${{ matrix.target }}.zip "dist/Agent管理器.app"
@@ -71,7 +68,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: agent-manager-${{ matrix.target }}
-          path: Agent管理器/dist/release/*
+          path: dist/release/*
 
   release:
     needs: build
