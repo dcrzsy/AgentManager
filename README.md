@@ -70,7 +70,7 @@ Agent管理器 --port 8080 --host 127.0.0.1 --no-browser
 python -m venv .venv
 source .venv/bin/activate  # Windows: .venv\Scripts\activate
 pip install -e ".[dev]"
-pyinstaller build/Agent管理器.spec --clean --noconfirm
+pyinstaller Agent管理器.spec --clean --noconfirm
 ```
 
 ### 项目结构

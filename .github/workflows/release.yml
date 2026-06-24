@@ -45,7 +45,7 @@ jobs:
 
       - name: Build executable
         run: |
-          pyinstaller build/Agent管理器.spec --clean --noconfirm
+          pyinstaller Agent管理器.spec --clean --noconfirm
 
       - name: Rename artifacts (Linux/Windows)
         if: matrix.os != 'macos-13' && matrix.os != 'macos-latest'
