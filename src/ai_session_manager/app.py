@@ -11,14 +11,30 @@ Agent 管理器 - 跨平台 Agent 管理工具
 import json
 import os
 import shutil
+import subprocess
 import sys
 import tempfile
+import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
 from http.server import BaseHTTPRequestHandler, HTTPServer, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
+
+
+def parse_date_arg(s, end_of_day=False):
+    """解析 YYYY-MM-DD 为时间戳。end_of_day=True 时为当天 23:59:59。解析失败返回 None。"""
+    s = (s or "").strip()
+    if not s:
+        return None
+    try:
+        dt = datetime.strptime(s, "%Y-%m-%d")
+        if end_of_day:
+            dt = dt.replace(hour=23, minute=59, second=59)
+        return dt.timestamp()
+    except ValueError:
+        return None
 
 PORT = 8080
 HOME = Path.home()
@@ -247,11 +263,10 @@ def find_session_roots(tool):
     return roots
 
 
-def find_hermes_sessions(days_old):
+def find_hermes_sessions(from_ts=None, to_ts=None):
     """从 Hermes state.db 读取会话列表"""
     if not HERMES_DB_PATH.exists():
         return []
-    cutoff = datetime.now() - timedelta(days=days_old) if days_old > 0 else None
     candidates = []
     try:
         import sqlite3
@@ -274,9 +289,11 @@ def find_hermes_sessions(days_old):
             started_at = row[3] or 0
             ended_at = row[4]
             mtime = ended_at or started_at
-            mtime_dt = datetime.fromtimestamp(mtime)
-            if cutoff is not None and mtime_dt >= cutoff:
+            if from_ts is not None and mtime < from_ts:
                 continue
+            if to_ts is not None and mtime > to_ts:
+                continue
+            mtime_dt = datetime.fromtimestamp(mtime)
             title = row[6] or ""
             first_msg = row[8] or ""
             display_title = title or first_msg or "(无标题)"
@@ -307,11 +324,10 @@ def find_hermes_sessions(days_old):
     return candidates
 
 
-def find_session_files(tool, days_old):
+def find_session_files(tool, from_ts=None, to_ts=None):
     if tool == "hermes":
-        return find_hermes_sessions(days_old)
+        return find_hermes_sessions(from_ts, to_ts)
 
-    cutoff = datetime.now() - timedelta(days=days_old) if days_old > 0 else None
     candidates = []
     seen = set()
 
@@ -340,29 +356,33 @@ def find_session_files(tool, days_old):
             seen.add(str(f))
 
             stat = f.stat()
-            mtime = datetime.fromtimestamp(stat.st_mtime)
-            if cutoff is None or mtime < cutoff:
-                preview = extract_preview(f)
-                cwd = extract_cwd(f, tool)
-                cwd_human = cwd
-                if cwd_human.startswith(str(HOME)):
-                    cwd_human = "~" + cwd_human[len(str(HOME)):]
-                display_path = str(f)
-                if display_path.startswith(str(HOME)):
-                    display_path = "~" + display_path[len(str(HOME)):]
-                # 目录分组键：取工具根目录后的前两段
-                dir_key = ""
-                try:
-                    for root in roots:
-                        if root.is_dir() and str(f).startswith(str(root)):
-                            rel = f.relative_to(root)
-                            parts = rel.parts
-                            if len(parts) > 1:
-                                dir_key = str(Path(*parts[:-1]))
-                            break
-                except Exception:
-                    pass
-                candidates.append({
+            mtime = stat.st_mtime
+            if from_ts is not None and mtime < from_ts:
+                continue
+            if to_ts is not None and mtime > to_ts:
+                continue
+            mtime_dt = datetime.fromtimestamp(mtime)
+            preview = extract_preview(f)
+            cwd = extract_cwd(f, tool)
+            cwd_human = cwd
+            if cwd_human.startswith(str(HOME)):
+                cwd_human = "~" + cwd_human[len(str(HOME)):]
+            display_path = str(f)
+            if display_path.startswith(str(HOME)):
+                display_path = "~" + display_path[len(str(HOME)):]
+            # 目录分组键：取工具根目录后的前两段
+            dir_key = ""
+            try:
+                for root in roots:
+                    if root.is_dir() and str(f).startswith(str(root)):
+                        rel = f.relative_to(root)
+                        parts = rel.parts
+                        if len(parts) > 1:
+                            dir_key = str(Path(*parts[:-1]))
+                        break
+            except Exception:
+                pass
+            candidates.append({
                     "path": str(f),
                     "display_path": display_path,
                     "dir": dir_key,
@@ -373,7 +393,7 @@ def find_session_files(tool, days_old):
                     "size": stat.st_size,
                     "size_human": human_size(stat.st_size),
                     "mtime": stat.st_mtime,
-                    "mtime_human": mtime.strftime("%Y-%m-%d %H:%M"),
+                    "mtime_human": mtime_dt.strftime("%Y-%m-%d %H:%M"),
                     "message_count": preview.get("count"),
                     "conversation_count": preview.get("conversation_count", 0),
                     "user_count": preview.get("user_count", 0),
@@ -386,14 +406,14 @@ def find_session_files(tool, days_old):
     return candidates
 
 
-def find_session_files_many(tools, days_old):
+def find_session_files_many(tools, from_ts=None, to_ts=None):
     """并发扫描多个工具，提升大目录下的响应速度"""
     sessions = []
     if not tools:
         return sessions
     workers = min(8, max(1, len(tools)))
     with ThreadPoolExecutor(max_workers=workers) as ex:
-        futures = [(tool, ex.submit(find_session_files, tool, days_old)) for tool in tools]
+        futures = [(tool, ex.submit(find_session_files, tool, from_ts, to_ts)) for tool in tools]
         for tool, fut in futures:
             try:
                 sessions.extend(fut.result())
@@ -1453,6 +1473,8 @@ def _load_html_page():
         html = "<html><body>无法加载前端页面</body></html>"
 
     html = html.replace('const HOME_DIR = "";', f'const HOME_DIR = "{str(HOME)}";')
+    # 注入后端版本号
+    html = html.replace('id="appVersion">v1.1.0<', f'id="appVersion">v{__version__}<')
     return html
 
 class Handler(BaseHTTPRequestHandler):
@@ -1486,14 +1508,50 @@ class Handler(BaseHTTPRequestHandler):
             self._html_response(_load_html_page())
         elif path == "/api/sessions":
             tools = qs.get("tools", [""])[0].split(",") if qs.get("tools") else list(TOOL_SESSION_ROOTS.keys())
-            days = int(qs.get("days", ["30"])[0])
             tools = [t.strip() for t in tools if t.strip()]
-            sessions = find_session_files_many(tools, days)
+            # 时间范围过滤：from / to（YYYY-MM-DD），兼容旧 days 参数（N 天前起）
+            from_ts = parse_date_arg(qs.get("from", [""])[0], end_of_day=False)
+            to_ts = parse_date_arg(qs.get("to", [""])[0], end_of_day=True)
+            days_raw = qs.get("days", [""])[0]
+            if from_ts is None and days_raw:
+                try:
+                    days = int(days_raw)
+                    if days > 0:
+                        from_ts = datetime.now().timestamp() - days * 86400
+                except ValueError:
+                    pass
+            scanned_start = time.time()
+            sessions = find_session_files_many(tools, from_ts, to_ts)
             sessions = post_process_sessions(sessions)
-            self._json_response({"sessions": sessions})
+            total_size = sum(s.get("size", 0) for s in sessions)
+            self._json_response({
+                "sessions": sessions,
+                "scanned_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "elapsed_ms": int((time.time() - scanned_start) * 1000),
+                "total_size": total_size,
+                "total_size_human": human_size(total_size),
+            })
         elif path == "/api/preview":
             p = qs.get("path", [""])[0]
             self._json_response(preview_full(p))
+        elif path == "/api/open":
+            # 在系统文件管理器中打开文件所在目录
+            p = qs.get("path", [""])[0]
+            target = safe_resolve(p)
+            if not target or not target.exists():
+                self._json_response({"error": "路径不存在或不在 HOME 目录下"}, 400)
+                return
+            opener_dir = target if target.is_dir() else target.parent
+            try:
+                if sys.platform.startswith("win"):
+                    subprocess.Popen(["explorer", str(opener_dir)])
+                elif sys.platform == "darwin":
+                    subprocess.Popen(["open", str(opener_dir)])
+                else:
+                    subprocess.Popen(["xdg-open", str(opener_dir)])
+                self._json_response({"opened": str(opener_dir)})
+            except Exception as e:
+                self._json_response({"error": str(e)}, 500)
         elif path == "/api/trash":
             self._json_response({"items": list_trash_items(), "root": str(TRASH_ROOT)})
         else:
