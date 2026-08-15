@@ -12,13 +12,30 @@ import json
 import os
 import shutil
 import sys
+import tempfile
+import uuid
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
-from http.server import BaseHTTPRequestHandler, HTTPServer
+from http.server import BaseHTTPRequestHandler, HTTPServer, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 PORT = 8080
 HOME = Path.home()
+
+from ai_session_manager import __version__  # noqa: E402
+
+# 回收站目录（删除的会话先移到这里，可恢复）
+TRASH_ROOT = HOME / ".agent-manager-trash"
+
+# 关键文件：无论什么情况都拒绝删除，防止误删核心数据
+CRITICAL_FILENAMES = {
+    "state.db", "state_5.sqlite", "state.sqlite",
+    "history.jsonl", "session_index.jsonl", "__global__.jsonl",
+    "settings.json", "settings.local.json", "credentials.json",
+    "oauth_creds.json", ".gitignore", "installation_id",
+    "keyrings", "config.json", "config.toml",
+}
 
 # 跨平台常用路径
 _APP_DATA = Path(os.environ.get("APPDATA", HOME / "AppData" / "Roaming"))
@@ -104,6 +121,38 @@ TOOL_SESSION_ROOTS = {
         # macOS
         _MAC_SUPPORT / "Hermes" / "state.db",
     ],
+    # —— 以下为实验性支持的工具：路径存在时才会被扫描，不存在则自动忽略 ——
+    "aider": [
+        HOME / ".aider",
+    ],
+    "opencode": [
+        HOME / ".local" / "share" / "opencode",
+        HOME / ".opencode",
+    ],
+    "gemini-cli": [
+        HOME / ".gemini" / "sessions",
+        _APP_DATA / "gemini" / "sessions",
+        _MAC_SUPPORT / "Google" / "gemini-cli" / "sessions",
+    ],
+    "cline": [
+        HOME / ".config" / "Cline",
+        HOME / ".config" / "cline",
+        HOME / ".cline",
+        _APP_DATA / "Cline",
+        _MAC_SUPPORT / "Cline",
+    ],
+    "qwen-code": [
+        HOME / ".qwen" / "sessions",
+        HOME / ".qwen-code" / "sessions",
+        HOME / ".qwen-code",
+        _APP_DATA / "qwen-code" / "sessions",
+    ],
+    "windsurf": [
+        HOME / ".codeium" / "windsurf",
+        HOME / ".config" / "Windsurf",
+        _APP_DATA / "Windsurf",
+        _MAC_SUPPORT / "Windsurf",
+    ],
 }
 
 HERMES_DB_PATH = HOME / ".hermes" / "state.db"
@@ -120,6 +169,7 @@ SKIP_PATH_KEYWORDS = {
     "/blobs/", "/plans/", "/tasks/",
     "/server/events/",
     "session_index.jsonl", "__global__.jsonl",
+    "/agent-manager-trash/",  # 回收站自身不允许被扫描
 }
 
 # 跳过文件名关键字
@@ -129,6 +179,7 @@ SKIP_FILE_KEYWORDS = {
     "known_marketplaces", "blocklist", "installed_plugins",
     "settings.json", "settings.local.json", ".gitignore",
     "installation_id", ".personality_migration",
+    "history.jsonl",  # 全局历史不是会话，删除风险大
 }
 
 
@@ -335,6 +386,43 @@ def find_session_files(tool, days_old):
     return candidates
 
 
+def find_session_files_many(tools, days_old):
+    """并发扫描多个工具，提升大目录下的响应速度"""
+    sessions = []
+    if not tools:
+        return sessions
+    workers = min(8, max(1, len(tools)))
+    with ThreadPoolExecutor(max_workers=workers) as ex:
+        futures = [(tool, ex.submit(find_session_files, tool, days_old)) for tool in tools]
+        for tool, fut in futures:
+            try:
+                sessions.extend(fut.result())
+            except Exception as e:
+                print(f"扫描 {tool} 失败: {e}", file=sys.stderr)
+    return sessions
+
+
+def _read_lines_capped(path, max_lines=500, max_bytes=8 * 1024 * 1024):
+    """按行读取文本，同时限制行数与总字节数。
+
+    会话文件可能高达数 GB（如 Orca/Codex 的 rollout jsonl），
+    绝不能整文件 read_text。返回的行列表即预览窗口。
+    """
+    lines = []
+    total = 0
+    try:
+        with open(path, "r", encoding="utf-8", errors="ignore") as f:
+            while len(lines) < max_lines and total < max_bytes:
+                line = f.readline(max_bytes - total + 1)
+                if not line:
+                    break
+                total += len(line)
+                lines.append(line)
+    except Exception:
+        pass
+    return lines
+
+
 def extract_preview(path):
     result = {"count": None, "first": None, "file_type": "text", "conversation_count": 0}
     ext = path.suffix.lower()
@@ -343,15 +431,11 @@ def extract_preview(path):
         result["file_type"] = "binary"
         return result
 
-    try:
-        text = path.read_text(encoding="utf-8", errors="ignore")
-    except Exception:
-        return result
-
     if ext == ".jsonl":
         result["file_type"] = "jsonl"
+        lines = _read_lines_capped(path, max_lines=500)
         count = 0
-        for line in text.splitlines()[:500]:
+        for line in lines:
             if line.strip():
                 count += 1
         result["count"] = count
@@ -365,11 +449,14 @@ def extract_preview(path):
     elif ext == ".json":
         result["file_type"] = "json"
         try:
+            text = "".join(_read_lines_capped(path, max_lines=2000, max_bytes=4 * 1024 * 1024))
             obj = json.loads(text)
             result["first"] = extract_any_user_text(obj) or text[:150].replace("\n", " ")
         except Exception:
+            text = "".join(_read_lines_capped(path, max_lines=200, max_bytes=64 * 1024))
             result["first"] = text[:150].replace("\n", " ")
     else:
+        text = "".join(_read_lines_capped(path, max_lines=200, max_bytes=64 * 1024))
         result["first"] = text[:150].replace("\n", " ")
 
     return result
@@ -378,7 +465,7 @@ def extract_preview(path):
 def extract_session_title(path):
     """尝试读取会话标题（Kimi state.json 的 title，或首条消息）"""
     try:
-        text = path.read_text(encoding="utf-8", errors="ignore")
+        text = "".join(_read_lines_capped(path, max_lines=2000, max_bytes=4 * 1024 * 1024))
         obj = json.loads(text)
         title = obj.get("title") or obj.get("lastPrompt")
         if title and isinstance(title, str):
@@ -388,15 +475,46 @@ def extract_session_title(path):
     return None
 
 
+_DECODE_CACHE = {}
+
+
 def _decode_path_segment(segment):
-    """解码 Claude/Pi 用 '-' 替换 '/' 的目录名，如 --data-- -> /data"""
+    """解码 Claude/Pi 用特殊字符替换路径分隔符的目录名，返回相对路径（无首斜杠）。
+
+    实际存在两种编码：
+    1. Pi/Orca 风格：'/' 全部替换为 '-'，如 --data-AI-场景- -> /data/AI/场景
+    2. Claude 官方风格：'/' -> '-', '-' -> '--'，如 -data-my--proj -> /data/my-proj
+
+    两种都能解码无连字符路径；含连字符时两者冲突。因此同时生成两个候选，
+    优先返回真实存在于磁盘的那个（带缓存），否则退回风格 1。
+    """
     if not segment:
         return ""
-    # 把 - 替换成 /，再把连续的 // 合并，最后去掉首尾 /
-    decoded = segment.replace("-", "/")
-    while "//" in decoded:
-        decoded = decoded.replace("//", "/")
-    return decoded.strip("/")
+    cached = _DECODE_CACHE.get(segment)
+    if cached is not None:
+        return cached
+
+    # 风格 1: 全部替换 + 合并连续斜杠
+    a = segment.replace("-", "/")
+    while "//" in a:
+        a = a.replace("//", "/")
+    a = a.strip("/")
+    # 风格 2: '--' 是原名中的连字符，' -' 是路径分隔符
+    b = "-".join(piece.replace("-", "/") for piece in segment.split("--")).lstrip("/")
+
+    result = a
+    if b != a:
+        for cand in (b, a):
+            try:
+                if Path("/" + cand).exists():
+                    result = cand
+                    break
+            except Exception:
+                pass
+    if len(_DECODE_CACHE) > 4096:  # 防缓存无限增长
+        _DECODE_CACHE.clear()
+    _DECODE_CACHE[segment] = result
+    return result
 
 
 def extract_cwd(path, tool):
@@ -404,18 +522,14 @@ def extract_cwd(path, tool):
     p = Path(path)
     try:
         if tool in ("codex", "orca"):
-            # 从 session_meta 读取 cwd
-            with open(p, "r", encoding="utf-8", errors="ignore") as f:
-                for _ in range(20):
-                    line = f.readline()
-                    if not line:
-                        break
-                    obj = json.loads(line)
-                    payload = obj.get("payload", {})
-                    if obj.get("type") == "session_meta" and isinstance(payload, dict):
-                        cwd = payload.get("cwd")
-                        if cwd:
-                            return cwd
+            # 从 session_meta 读取 cwd（带行/字节上限）
+            for line in _read_lines_capped(p, max_lines=30, max_bytes=4 * 1024 * 1024):
+                obj = json.loads(line)
+                payload = obj.get("payload", {})
+                if obj.get("type") == "session_meta" and isinstance(payload, dict):
+                    cwd = payload.get("cwd")
+                    if cwd:
+                        return cwd
         elif tool == "claude":
             # 从项目目录名解码
             parts = p.parts
@@ -583,7 +697,11 @@ def post_process_sessions(sessions):
     """会话列表后处理：合并、分组、标题"""
     sessions = merge_kimi_sessions(sessions)
     for s in sessions:
-        s["session_group"] = get_session_group(s["path"], s["tool"])
+        if s["tool"] == "hermes":
+            # Hermes 按月份分组
+            s["session_group"] = datetime.fromtimestamp(s["mtime"]).strftime("%Y-%m")
+        else:
+            s["session_group"] = get_session_group(s["path"], s["tool"])
         if not s.get("session_title"):
             s["session_title"] = s.get("first_message") or ""
     return sessions
@@ -775,14 +893,14 @@ def extract_conversation_messages(path, max_lines=500):
     if not p.exists():
         return []
     try:
-        text = p.read_text(encoding="utf-8", errors="ignore")
+        lines = _read_lines_capped(p, max_lines=max_lines)
     except Exception:
         return []
     ext = p.suffix.lower()
     messages = []
     seen = set()
     if ext == ".jsonl":
-        for line in text.splitlines()[:max_lines]:
+        for line in lines:
             line = line.strip()
             if not line:
                 continue
@@ -966,17 +1084,22 @@ def delete_hermes_session(sid):
         return False, str(e)
 
 
-def delete_files(paths):
+def delete_files(paths, mode="trash"):
+    """删除会话。
+
+    mode="trash"（默认）: 先移入回收站 ~/.agent-manager-trash，可恢复
+    mode="permanent": 直接永久删除
+    Hermes 会话直接永久删除（说明见 delete_hermes_session）。
+    """
     deleted = []
+    trashed = []
     failed = []
-    hermes_deleted = False
     for p_str in paths:
         if p_str.startswith("hermes://"):
             sid = p_str[9:]
             ok, err = delete_hermes_session(sid)
             if ok:
                 deleted.append(p_str)
-                hermes_deleted = True
             else:
                 failed.append({"path": p_str, "error": err})
             continue
@@ -987,20 +1110,181 @@ def delete_files(paths):
         if not p.exists():
             failed.append({"path": p_str, "error": "文件不存在"})
             continue
+        if p.name in CRITICAL_FILENAMES or any(part in CRITICAL_FILENAMES for part in p.parts):
+            failed.append({"path": p_str, "error": f"{p.name} 是核心数据文件，拒绝删除"})
+            continue
         try:
-            if p.is_dir():
-                shutil.rmtree(p)
+            if mode == "permanent":
+                if p.is_dir():
+                    shutil.rmtree(p)
+                else:
+                    p.unlink()
+                deleted.append(str(p))
             else:
-                p.unlink()
-            deleted.append(str(p))
+                moved = move_to_trash(p)
+                if moved:
+                    trashed.append(str(p))
+                else:
+                    failed.append({"path": p_str, "error": "移入回收站失败"})
         except Exception as e:
             failed.append({"path": p_str, "error": str(e)})
-    # 清理 Kimi / Codex / Orca 索引
-    if deleted:
+    # 清理 Kimi / Codex / Orca 索引（被移走/删除的会话同步清除失效索引）
+    if deleted or trashed:
         clean_kimi_session_index()
         clean_codex_state_db()
         clean_orca_state_db()
-    return {"deleted": deleted, "failed": failed}
+    return {"deleted": deleted, "trashed": trashed, "failed": failed}
+
+
+# ---------------------------------------------------------------------------
+# 回收站
+# ---------------------------------------------------------------------------
+
+def _trash_item_name(p):
+    """生成回收站条目目录名：时间戳 + 原名，确保唯一"""
+    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    name = f"{stamp}-{p.name}"
+    target = TRASH_ROOT / name
+    idx = 2
+    while target.exists():
+        target = TRASH_ROOT / f"{stamp}-{idx}-{p.name}"
+        idx += 1
+    return target
+
+
+def move_to_trash(p):
+    """把文件/目录移入回收站，写入 manifest.json 记录原路径"""
+    item_dir = None
+    data = None
+    try:
+        TRASH_ROOT.mkdir(parents=True, exist_ok=True)
+        item_dir = _trash_item_name(p)
+        item_dir.mkdir(parents=True, exist_ok=True)
+        data = item_dir / "data"
+        is_dir = p.is_dir()
+        size = None if is_dir else p.stat().st_size
+        shutil.move(str(p), str(data))
+        manifest = {
+            "id": item_dir.name,
+            "original": str(p),
+            "trashed_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "kind": "dir" if is_dir else "file",
+            "size": _dir_size(data) if is_dir else size,
+        }
+        (item_dir / "manifest.json").write_text(
+            json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+        return True
+    except Exception as e:
+        print(f"移入回收站失败 {p}: {e}", file=sys.stderr)
+        # 回滚：数据已移动但清单写入失败时移回原处
+        if data is not None and data.exists():
+            try:
+                shutil.move(str(data), str(p))
+                if item_dir is not None:
+                    shutil.rmtree(item_dir, ignore_errors=True)
+            except Exception:
+                pass
+        return False
+
+
+def _dir_size(d):
+    total = 0
+    for f in d.rglob("*"):
+        if f.is_file():
+            try:
+                total += f.stat().st_size
+            except Exception:
+                pass
+    return total
+
+
+def list_trash_items():
+    """列出回收站条目（只读 manifest，不计算体积）"""
+    items = []
+    if not TRASH_ROOT.is_dir():
+        return items
+    for item_dir in sorted(TRASH_ROOT.iterdir()):
+        mf = item_dir / "manifest.json"
+        if not mf.exists():
+            continue
+        try:
+            manifest = json.loads(mf.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        data = item_dir / "data"
+        exists = data.exists()
+        try:
+            size = manifest.get("size", _dir_size(data) if exists else 0)
+        except Exception:
+            size = 0
+        original = manifest.get("original", "")
+        display = original
+        if display.startswith(str(HOME)):
+            display = "~" + display[len(str(HOME)):]
+        items.append({
+            "id": item_dir.name,
+            "original": original,
+            "display_path": display,
+            "trashed_at": manifest.get("trashed_at", ""),
+            "size": size,
+            "size_human": human_size(size),
+            "exists": exists,
+            "name": manifest.get("name", data.name if exists else ""),
+        })
+    items.sort(key=lambda x: x["trashed_at"], reverse=True)
+    return items
+
+
+def restore_trash_item(item_id):
+    """把回收站条目恢复到原路径。返回 (ok, error_msg)"""
+    item_dir = TRASH_ROOT / item_id
+    mf = item_dir / "manifest.json"
+    data = item_dir / "data"
+    if not mf.exists() or not data.exists():
+        return False, "回收站条目不存在或数据缺失"
+    try:
+        manifest = json.loads(mf.read_text(encoding="utf-8"))
+        original = Path(manifest["original"])
+    except Exception as e:
+        return False, f"读取清单失败: {e}"
+    if original.exists():
+        return False, f"原路径已被占用: {original}"
+    try:
+        original.parent.mkdir(parents=True, exist_ok=True)
+        shutil.move(str(data), str(original))
+        if item_dir.exists():
+            shutil.rmtree(item_dir, ignore_errors=True)
+        return True, ""
+    except Exception as e:
+        return False, str(e)
+
+
+def delete_trash_item_permanent(item_id):
+    """从回收站彻底删除（不可恢复）"""
+    item_dir = TRASH_ROOT / item_id
+    if not item_dir.exists():
+        return False, "条目不存在"
+    try:
+        shutil.rmtree(item_dir)
+        return True, ""
+    except Exception as e:
+        return False, str(e)
+
+
+def empty_trash():
+    """清空回收站，返回删除条目数"""
+    if not TRASH_ROOT.is_dir():
+        return 0
+    count = 0
+    for item_dir in TRASH_ROOT.iterdir():
+        if (item_dir / "manifest.json").exists():
+            try:
+                shutil.rmtree(item_dir)
+                count += 1
+            except Exception:
+                pass
+    return count
 
 
 def preview_hermes_session(sid, max_lines=300):
@@ -1061,9 +1345,12 @@ def preview_full(path_str, max_lines=300):
             return {"error": "二进制文件无法预览", "type": "binary"}
         size = p.stat().st_size
         filename = p.name
-        text = p.read_text(encoding="utf-8", errors="ignore")
         ext = p.suffix.lower()
-        total_lines = text.count("\n") + (1 if text and not text.endswith("\n") else 0)
+
+        # 只读预览窗口（最多 max_lines 行 / 8MB），避免整读超大文件
+        window_lines = _read_lines_capped(p, max_lines=max_lines, max_bytes=8 * 1024 * 1024)
+        text = "".join(window_lines)
+        total_lines = _count_lines_capped(p)
 
         # 提取对话视图
         conversation = extract_conversation_messages(p, max_lines=max_lines)
@@ -1072,7 +1359,7 @@ def preview_full(path_str, max_lines=300):
 
         if ext == ".jsonl":
             raw_lines = []
-            for line in text.splitlines()[:max_lines]:
+            for line in window_lines:
                 line = line.strip()
                 if line:
                     try:
@@ -1115,6 +1402,28 @@ def preview_full(path_str, max_lines=300):
             }
     except Exception as e:
         return {"error": str(e)}
+
+
+def _count_lines_capped(p, max_bytes=512 * 1024 * 1024):
+    """分块统计行数。超大文件最多读 512MB 即停止（返回约数，避免拖动 2.8GB 文件）"""
+    count = 0
+    capped = False
+    try:
+        with open(p, "rb") as f:
+            chunk = f.read(1024 * 1024)
+            read_total = 0
+            last_nl = False
+            while chunk and read_total < max_bytes:
+                count += chunk.count(b"\n")
+                last_nl = chunk.endswith(b"\n")
+                read_total += len(chunk)
+                chunk = f.read(1024 * 1024)
+            capped = read_total >= max_bytes
+    except Exception:
+        return 0
+    if not last_nl and count > 0:
+        count += 1
+    return count if not capped else f">= {count}"
 
 
 
@@ -1178,40 +1487,49 @@ class Handler(BaseHTTPRequestHandler):
         elif path == "/api/sessions":
             tools = qs.get("tools", [""])[0].split(",") if qs.get("tools") else list(TOOL_SESSION_ROOTS.keys())
             days = int(qs.get("days", ["30"])[0])
-            sessions = []
-            for tool in tools:
-                tool = tool.strip()
-                if not tool:
-                    continue
-                sessions.extend(find_session_files(tool, days))
+            tools = [t.strip() for t in tools if t.strip()]
+            sessions = find_session_files_many(tools, days)
             sessions = post_process_sessions(sessions)
             self._json_response({"sessions": sessions})
         elif path == "/api/preview":
             p = qs.get("path", [""])[0]
             self._json_response(preview_full(p))
+        elif path == "/api/trash":
+            self._json_response({"items": list_trash_items(), "root": str(TRASH_ROOT)})
         else:
             self.send_error(404)
+
+    def _json_body(self):
+        """读取 POST JSON body"""
+        length = int(self.headers.get("Content-Length", 0))
+        if length <= 0:
+            return {}
+        body = self.rfile.read(length).decode("utf-8")
+        try:
+            return json.loads(body)
+        except Exception:
+            return {"raw": body}
 
     def do_POST(self):
         parsed = urlparse(self.path)
         if parsed.path == "/api/delete":
-            length = int(self.headers.get("Content-Length", 0))
-            body = self.rfile.read(length).decode("utf-8")
+            data = self._json_body()
+            paths = data.get("paths", [])
+            mode = data.get("mode", "trash")
+            log_file = Path(tempfile.gettempdir()) / "ai-session-manager.log"
             try:
-                data = json.loads(body)
-                paths = data.get("paths", [])
-                try:
-                    with open("/tmp/ai-session-manager.log", "a", encoding="utf-8") as f:
-                        f.write(f"[DELETE] {datetime.now()} paths={paths!r}\n")
-                except Exception:
-                    pass
-                result = delete_files(paths)
+                with open(log_file, "a", encoding="utf-8") as f:
+                    f.write(f"[DELETE] {datetime.now()} mode={mode} paths={paths!r}\n")
+            except Exception:
+                pass
+            try:
+                result = delete_files(paths, mode=mode)
                 self._json_response(result)
             except Exception as e:
                 import traceback
-                log_msg = f"[DELETE ERROR] {datetime.now()} body={body!r} error={e}\n{traceback.format_exc()}\n"
+                log_msg = f"[DELETE ERROR] {datetime.now()} body={json.dumps(data, ensure_ascii=False)!r} error={e}\n{traceback.format_exc()}\n"
                 try:
-                    with open("/tmp/ai-session-manager.log", "a", encoding="utf-8") as f:
+                    with open(log_file, "a", encoding="utf-8") as f:
                         f.write(log_msg)
                 except Exception:
                     pass
@@ -1221,13 +1539,39 @@ class Handler(BaseHTTPRequestHandler):
             codex_removed = clean_codex_state_db()
             orca_removed = clean_orca_state_db()
             self._json_response({"kimi_removed": kimi_removed, "codex_removed": codex_removed, "orca_removed": orca_removed})
+        elif parsed.path == "/api/trash/restore":
+            data = self._json_body()
+            ids = data.get("ids", [])
+            restored, failed = [], []
+            for item_id in ids:
+                ok, err = restore_trash_item(item_id)
+                if ok:
+                    restored.append(item_id)
+                else:
+                    failed.append({"id": item_id, "error": err})
+            self._json_response({"restored": restored, "failed": failed})
+        elif parsed.path == "/api/trash/delete":
+            data = self._json_body()
+            ids = data.get("ids", [])
+            deleted, failed = [], []
+            for item_id in ids:
+                ok, err = delete_trash_item_permanent(item_id)
+                if ok:
+                    deleted.append(item_id)
+                else:
+                    failed.append({"id": item_id, "error": err})
+            self._json_response({"deleted": deleted, "failed": failed})
+        elif parsed.path == "/api/trash/empty":
+            count = empty_trash()
+            self._json_response({"removed": count})
         else:
             self.send_error(404)
 
 
 def main(argv=None):
     import argparse
-    parser = argparse.ArgumentParser(description="Agent 管理器")
+    parser = argparse.ArgumentParser(description="Agent 管理器", prog="Agent管理器")
+    parser.add_argument("--version", action="version", version=f"Agent管理器 {__version__}")
     parser.add_argument("--port", type=int, default=PORT, help=f"监听端口 (默认 {PORT})")
     parser.add_argument("--host", type=str, default="127.0.0.1", help="监听地址 (默认 127.0.0.1)")
     parser.add_argument("--no-browser", action="store_true", help="启动时不自动打开浏览器")
@@ -1237,7 +1581,8 @@ def main(argv=None):
     server = None
     for p in range(port, port + 10):
         try:
-            server = HTTPServer((args.host, p), Handler)
+            # 多线程处理：长扫描进行中时回收站/预览等请求不被阻塞
+            server = ThreadingHTTPServer((args.host, p), Handler)
             port = p
             break
         except OSError:

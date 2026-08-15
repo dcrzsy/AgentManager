@@ -13,7 +13,9 @@ body {
   color: #333;
 }
 .container { max-width: 1400px; margin: 0 auto; }
+.header-row { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
 h1 { margin: 0 0 20px; font-size: 24px; }
+.version { font-size: 12px; color: #aaa; }
 .toolbar {
   display: flex;
   flex-wrap: wrap;
@@ -45,6 +47,9 @@ h1 { margin: 0 0 20px; font-size: 24px; }
 .toolbar button.danger { background: #ff3b30; }
 .toolbar button.danger:hover { background: #c62828; }
 .toolbar button.secondary { background: #6c757d; }
+.toolbar button.secondary:hover { background: #545b62; }
+.toolbar button.trash-btn { background: #ff9500; }
+.toolbar button.trash-btn:hover { background: #d97f00; }
 .stats {
   display: flex;
   gap: 16px;
@@ -60,6 +65,8 @@ h1 { margin: 0 0 20px; font-size: 24px; }
 }
 .stat-card .number { font-size: 22px; font-weight: 600; color: #007aff; }
 .stat-card .label { font-size: 12px; color: #888; margin-top: 4px; }
+.stat-card.orange .number { color: #ff9500; }
+.stat-card.red .number { color: #ff3b30; }
 .group {
   background: #fff;
   border-radius: 12px;
@@ -79,30 +86,10 @@ h1 { margin: 0 0 20px; font-size: 24px; }
   user-select: none;
 }
 .group-header input { width: 18px; height: 18px; }
-.group-header .tool-name { font-size: 16px; }
+.group-header .tool-name { font-size: 16px; display: flex; align-items: center; gap: 8px; }
 .group-header .tool-count { font-size: 13px; color: #888; margin-left: auto; }
 .group-content { display: block; }
 .group-content.collapsed { display: none; }
-.subgroup {
-  border-top: 1px solid #f0f0f0;
-  background: #fff;
-}
-.subgroup-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 16px;
-  background: #fafafb;
-  color: #555;
-  font-size: 13px;
-  cursor: pointer;
-  user-select: none;
-}
-.subgroup-header:hover { background: #f0f0f2; }
-.subgroup-header .dir-name { font-family: monospace; color: #333; }
-.subgroup-header .dir-count { color: #888; margin-left: auto; font-size: 12px; }
-.subgroup-content { display: block; }
-.subgroup-content.collapsed { display: none; }
 table { width: 100%; border-collapse: collapse; }
 th, td {
   padding: 10px 12px;
@@ -112,6 +99,9 @@ th, td {
   vertical-align: top;
 }
 th { background: #fafafa; font-weight: 500; color: #666; position: sticky; top: 0; }
+th.sortable { cursor: pointer; user-select: none; white-space: nowrap; }
+th.sortable:hover { color: #007aff; }
+th.sortable .arrow { font-size: 11px; margin-left: 3px; }
 tr:hover { background: #f9f9fb; }
 td:first-child { width: 40px; text-align: center; vertical-align: middle; }
 td input[type="checkbox"] { width: 18px; height: 18px; cursor: pointer; }
@@ -127,6 +117,14 @@ td input[type="checkbox"] { width: 18px; height: 18px; cursor: pointer; }
 .size { color: #888; font-size: 13px; white-space: nowrap; }
 .mtime { color: #888; font-size: 13px; white-space: nowrap; }
 .file-type { font-size: 12px; color: #007aff; background: #f0f7ff; padding: 2px 6px; border-radius: 4px; }
+.tool-badge {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  color: #fff;
+  display: inline-block;
+  line-height: 1.6;
+}
 .actions button {
   padding: 5px 10px;
   border: 1px solid #007aff;
@@ -137,16 +135,13 @@ td input[type="checkbox"] { width: 18px; height: 18px; cursor: pointer; }
   font-size: 13px;
 }
 .actions button:hover { background: #f0f7ff; }
-.empty {
-  padding: 40px;
-  text-align: center;
-  color: #888;
-}
-.loading {
-  padding: 40px;
-  text-align: center;
+.actions button.link {
+  border: 1px solid #ddd;
   color: #666;
 }
+.actions button.link:hover { background: #f5f5f7; }
+.empty { padding: 40px; text-align: center; color: #888; }
+.loading { padding: 40px; text-align: center; color: #666; }
 .modal-overlay {
   position: fixed;
   inset: 0;
@@ -167,6 +162,7 @@ td input[type="checkbox"] { width: 18px; height: 18px; cursor: pointer; }
   flex-direction: column;
   box-shadow: 0 10px 40px rgba(0,0,0,0.2);
 }
+.modal.small { max-width: 520px; }
 .modal-header {
   padding: 14px 20px;
   border-bottom: 1px solid #eee;
@@ -209,10 +205,7 @@ td input[type="checkbox"] { width: 18px; height: 18px; cursor: pointer; }
   border-bottom: 2px solid transparent;
 }
 .modal-tab.active { color: #007aff; border-bottom-color: #007aff; font-weight: 500; }
-.modal-search {
-  padding: 10px 20px;
-  border-bottom: 1px solid #f0f0f0;
-}
+.modal-search { padding: 10px 20px; border-bottom: 1px solid #f0f0f0; }
 .modal-search input {
   width: 100%;
   padding: 8px 12px;
@@ -234,6 +227,37 @@ td input[type="checkbox"] { width: 18px; height: 18px; cursor: pointer; }
   font-size: 13px;
   line-height: 1.5;
   border: 1px solid #eee;
+}
+.modal-footer {
+  padding: 14px 20px;
+  border-top: 1px solid #eee;
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.modal-footer button {
+  padding: 8px 18px;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  cursor: pointer;
+}
+.modal-footer .primary { background: #ff3b30; color: #fff; }
+.modal-footer .primary:hover { background: #c62828; }
+.modal-footer .plain { background: #e9ecef; color: #333; }
+.modal-footer .plain:hover { background: #dde1e5; }
+.modal-footer .ok { background: #007aff; color: #fff; }
+.modal-footer .ok:hover { background: #0056b3; }
+.confirm-note {
+  background: #fff4f0;
+  border: 1px solid #ffd5c2;
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: 13px;
+  color: #8a4b2d;
+  margin: 12px 0;
 }
 .chat-message {
   display: flex;
@@ -325,6 +349,7 @@ td input[type="checkbox"] { width: 18px; height: 18px; cursor: pointer; }
   z-index: 200;
   opacity: 0;
   transition: opacity 0.3s;
+  max-width: 480px;
 }
 .toast.show { opacity: 1; }
 .toast.success { background: #34c759; }
@@ -338,11 +363,27 @@ td input[type="checkbox"] { width: 18px; height: 18px; cursor: pointer; }
   color: #666;
   font-size: 14px;
 }
+.trash-table td { font-size: 13px; }
+.trash-table .op button {
+  padding: 4px 10px;
+  border-radius: 5px;
+  border: 1px solid #ddd;
+  background: #fff;
+  cursor: pointer;
+  font-size: 12px;
+  margin-right: 6px;
+}
+.trash-table .op .restore { color: #007aff; border-color: #007aff; }
+.trash-table .op .restore:hover { background: #f0f7ff; }
+.trash-table .op .del { color: #ff3b30; border-color: #ff3b30; }
+.trash-table .op .del:hover { background: #fff0ee; }
 </style>
 </head>
 <body>
 <div class="container">
-  <h1>🧹 Agent 管理器</h1>
+  <div class="header-row">
+    <h1>🧹 Agent 管理器 <span class="version" id="appVersion">v1.1.0</span></h1>
+  </div>
 
   <div class="toolbar">
     <label>工具:</label>
@@ -353,25 +394,34 @@ td input[type="checkbox"] { width: 18px; height: 18px; cursor: pointer; }
       <option value="kimi-code" selected>Kimi Code</option>
       <option value="pi" selected>Pi</option>
       <option value="hermes" selected>Hermes</option>
+      <option value="aider">Aider</option>
+      <option value="opencode">OpenCode</option>
+      <option value="gemini-cli">Gemini CLI</option>
+      <option value="cline">Cline</option>
+      <option value="qwen-code">Qwen Code</option>
+      <option value="windsurf">Windsurf</option>
     </select>
     <label>只显示 N 天前的会话 (0=全部):</label>
     <input type="number" id="daysOld" value="0" min="0" style="width:70px">
     <button onclick="loadSessions()">🔍 扫描</button>
-    <input type="text" id="searchInput" placeholder="🔎 模糊搜索标题或创建目录..." style="flex:1;min-width:200px" oninput="applySearch()">
+    <input type="text" id="searchInput" placeholder="🔎 模糊搜索标题、路径或创建目录..." style="flex:1;min-width:200px" oninput="applySearch()">
     <button class="secondary" onclick="selectAll(true)">全选</button>
     <button class="secondary" onclick="selectAll(false)">取消全选</button>
-    <button class="danger" onclick="deleteSelected()">🗑️ 删除选中</button>
+    <button class="secondary" onclick="exportCsv()" title="导出当前列表为 CSV 文件">📄 导出 CSV</button>
+    <button class="trash-btn" onclick="openTrash()" title="查看回收站，可恢复或彻底删除">🗑️ 回收站 <span id="trashCount">(0)</span></button>
+    <button class="danger" onclick="askDelete()">删除选中</button>
     <button class="secondary" onclick="cleanupStaleIndex()" title="清理 Kimi/Codex 会话索引中已失效的条目">🧹 清理失效索引</button>
   </div>
 
   <div class="stats">
     <div class="stat-card"><div class="number" id="statTotal">0</div><div class="label">总会话数</div></div>
     <div class="stat-card"><div class="number" id="statSelected">0</div><div class="label">已选中</div></div>
-    <div class="stat-card"><div class="number" id="statSize">0 MB</div><div class="label">选中大小</div></div>
+    <div class="stat-card"><div class="number" id="statSize">0 B</div><div class="label">选中大小</div></div>
+    <div class="stat-card orange"><div class="number" id="statTrash">0</div><div class="label">回收站条目</div></div>
   </div>
 
   <div class="notice" id="notice">
-    第四版：支持 Claude、Codex、Orca、Kimi、Pi、Hermes。Hermes 从 ~/.hermes/state.db 读取；Orca 扫描 ~/.config/orca/codex-runtime-home/home/sessions。缓存/二进制已自动过滤。
+    第五版（v1.1.0）：新增「回收站」——删除默认移入回收站可恢复；新增 Aider / OpenCode / Gemini CLI / Cline / Qwen Code / Windsurf 扫描；支持并发扫描、列表排序、CSV 导出；Hermes 始终直接删除（数据库记录）；关键数据文件（state.db / history.jsonl 等）拒绝删除。
   </div>
 
   <div id="content">
@@ -379,6 +429,7 @@ td input[type="checkbox"] { width: 18px; height: 18px; cursor: pointer; }
   </div>
 </div>
 
+<!-- 预览弹窗 -->
 <div class="modal-overlay" id="previewModal" onclick="if(event.target===this) closeModal()">
   <div class="modal">
     <div class="modal-header">
@@ -399,6 +450,36 @@ td input[type="checkbox"] { width: 18px; height: 18px; cursor: pointer; }
   </div>
 </div>
 
+<!-- 删除确认弹窗 -->
+<div class="modal-overlay" id="confirmModal" onclick="if(event.target===this) closeConfirm()">
+  <div class="modal small">
+    <div class="modal-header">
+      <h3>确认删除</h3>
+      <button onclick="closeConfirm()">&times;</button>
+    </div>
+    <div class="modal-body" id="confirmBody"></div>
+    <div class="modal-footer">
+      <button class="plain" onclick="closeConfirm()">取消</button>
+      <button class="primary" id="confirmDeleteBtn" onclick="doDelete()">🗑️ 确认删除</button>
+    </div>
+  </div>
+</div>
+
+<!-- 回收站弹窗 -->
+<div class="modal-overlay" id="trashModal" onclick="if(event.target===this) closeTrash()">
+  <div class="modal">
+    <div class="modal-header">
+      <h3>🗑️ 回收站 <span id="trashModalCount" style="font-size:13px;color:#888"></span></h3>
+      <button onclick="closeTrash()">&times;</button>
+    </div>
+    <div class="modal-body" id="trashBody"></div>
+    <div class="modal-footer">
+      <button class="plain" onclick="closeTrash()">关闭</button>
+      <button class="primary" onclick="emptyTrash()" title="彻底删除回收站内所有条目，不可恢复">🗑️ 清空回收站</button>
+    </div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script>
@@ -407,6 +488,14 @@ let allSessions = [];
 let currentPreviewData = null;
 let currentPreviewTab = 'conversation';
 let currentPreviewPath = '';
+let sortField = 'mtime';
+let sortDesc = true;
+
+const TOOL_BADGE = {
+  claude: '#d97757', codex: '#7c3aed', orca: '#0891b2', 'kimi-code': '#6366f1',
+  pi: '#0ea5e9', hermes: '#8b5cf6', aider: '#10b981', opencode: '#088',
+  'gemini-cli': '#4f7df9', cline: '#ef4444', 'qwen-code': '#6157df', windsurf: '#06b6d4'
+};
 
 function showToast(msg, type='success') {
   const t = document.getElementById('toast');
@@ -429,25 +518,30 @@ async function api(path, opts={}) {
 }
 
 function formatSize(bytes) {
-  const units = ['B','KB','MB','GB'];
-  let i=0;
-  while(bytes>=1024 && i<units.length-1){ bytes/=1024; i++; }
-  return bytes.toFixed(1)+' '+units[i];
+  if (bytes === 0) return '0 B';
+  const units = ['B','KB','MB','GB','TB'];
+  let i = 0;
+  while (bytes >= 1024 && i < units.length - 1) { bytes /= 1024; i++; }
+  return bytes.toFixed(1) + ' ' + units[i];
 }
 
 async function loadSessions() {
   const tools = Array.from(document.getElementById('toolFilter').selectedOptions).map(o => o.value).join(',');
   const days = document.getElementById('daysOld').value;
   const content = document.getElementById('content');
-  content.innerHTML = '<div class="loading">扫描中...</div>';
+  content.innerHTML = '<div class="loading">扫描中...（多工具并发扫描，大目录可能需要几秒）</div>';
   try {
+    const started = Date.now();
     const data = await api(`/api/sessions?tools=${tools}&days=${days}`);
     allSessions = data.sessions || [];
     applySearch();
+    const elapsed = ((Date.now() - started) / 1000).toFixed(1);
+    showToast(`扫描完成：${allSessions.length} 个会话（${elapsed}s）`, 'success');
   } catch (e) {
     content.innerHTML = '<div class="empty">加载失败: ' + e.message + '</div>';
     showToast('加载失败: ' + e.message, 'error');
   }
+  refreshTrashCount();
 }
 
 function applySearch() {
@@ -466,10 +560,37 @@ function applySearch() {
   updateStats();
 }
 
+function setSort(field) {
+  if (sortField === field) {
+    sortDesc = !sortDesc;
+  } else {
+    sortField = field;
+    sortDesc = field === 'mtime' || field === 'size';
+  }
+  applySearch();
+}
+
+function sortValue(s, field) {
+  switch (field) {
+    case 'filename': return (s.filename || '').toLowerCase();
+    case 'title': return (s.session_title || '').toLowerCase();
+    case 'cwd': return (s.cwd || '').toLowerCase();
+    case 'size': return s.size || 0;
+    case 'group': return (s.session_group || s.dir || '');
+    case 'events': return s.conversation_count || s.message_count || 0;
+    default: return s.mtime || 0;
+  }
+}
+
+function sortArrow(field) {
+  if (sortField !== field) return '';
+  return sortDesc ? '▼' : '▲';
+}
+
 function renderGroups(sessions) {
   const content = document.getElementById('content');
   if (sessions.length === 0) {
-    content.innerHTML = '<div class="empty">没有找到符合条件的会话<br><br>可以尝试把「天龄」调大，或检查 Claude / Codex / Orca / Kimi / Pi / Hermes 的会话位置是否存在。</div>';
+    content.innerHTML = '<div class="empty">没有找到符合条件的会话<br><br>可以尝试把「天龄」调大，或在工具栏勾选更多工具（Aider / OpenCode / Gemini CLI 等）。</div>';
     return;
   }
   const byTool = {};
@@ -477,13 +598,23 @@ function renderGroups(sessions) {
     byTool[s.tool] = byTool[s.tool] || [];
     byTool[s.tool].push(s);
   });
+  for (const tool in byTool) {
+    byTool[tool].sort((a, b) => {
+      const va = sortValue(a, sortField), vb = sortValue(b, sortField);
+      let cmp = 0;
+      if (typeof va === 'number' && typeof vb === 'number') cmp = va - vb;
+      else cmp = String(va).localeCompare(String(vb), 'zh-CN');
+      return sortDesc ? -cmp : cmp;
+    });
+  }
 
   let html = '';
   for (const [tool, list] of Object.entries(byTool)) {
+    const badge = TOOL_BADGE[tool] || '#888';
     html += `<div class="group" data-tool="${tool}">
       <div class="group-header" onclick="toggleGroup(this)">
         <input type="checkbox" onclick="event.stopPropagation();toggleTool('${tool}', this.checked)">
-        <span class="tool-name">${toolName(tool)}</span>
+        <span class="tool-name"><span class="tool-badge" style="background:${badge}">${toolName(tool)}</span></span>
         <span class="tool-count">${list.length} 项</span>
       </div>
       <div class="group-content">
@@ -491,14 +622,14 @@ function renderGroups(sessions) {
           <thead>
             <tr>
               <th style="width:40px"></th>
-              <th>文件名</th>
-              <th>目录/会话</th>
-              <th>会话标题</th>
-              <th>创建目录</th>
-              <th style="width:90px">对话/事件</th>
-              <th style="width:80px">大小</th>
-              <th style="width:130px">修改时间</th>
-              <th style="width:70px">操作</th>
+              <th class="sortable" onclick="setSort('filename')">文件名 <span class="arrow">${sortArrow('filename')}</span></th>
+              <th class="sortable" onclick="setSort('group')">目录/会话 <span class="arrow">${sortArrow('group')}</span></th>
+              <th class="sortable" onclick="setSort('title')">会话标题 <span class="arrow">${sortArrow('title')}</span></th>
+              <th class="sortable" onclick="setSort('cwd')">创建目录 <span class="arrow">${sortArrow('cwd')}</span></th>
+              <th class="sortable" onclick="setSort('events')" style="width:100px">对话/事件 <span class="arrow">${sortArrow('events')}</span></th>
+              <th class="sortable" onclick="setSort('size')" style="width:80px">大小 <span class="arrow">${sortArrow('size')}</span></th>
+              <th class="sortable" onclick="setSort('mtime')" style="width:130px">修改时间 <span class="arrow">${sortArrow('mtime')}</span></th>
+              <th style="width:110px">操作</th>
             </tr>
           </thead>
           <tbody>`;
@@ -522,16 +653,26 @@ function renderGroups(sessions) {
         </td>
         <td class="size">${s.size_human}</td>
         <td class="mtime">${s.mtime_human}</td>
-        <td class="actions"><button onclick="previewSession('${encodeURIComponent(s.path)}')">预览</button></td>
+        <td class="actions">
+          <button onclick="previewSession('${encodeURIComponent(s.path)}')">预览</button>
+          <button class="link" onclick="copyPath('${encodeURIComponent(s.path)}')" title="复制完整路径">⧉</button>
+        </td>
       </tr>`;
     }
     html += '</tbody></table></div></div>';
   }
   content.innerHTML = html;
+
+  // 高亮排序箭头所在列头样式
+  document.querySelectorAll('th.sortable').forEach(th => {
+    th.style.color = th.querySelector('.arrow') && th.querySelector('.arrow').textContent ? '#007aff' : '';
+  });
 }
 
 function toolName(tool) {
-  const map = {claude:'Claude Code', codex:'Codex', orca:'Orca', 'kimi-code':'Kimi Code', 'kimi-cli':'Kimi CLI', pi:'Pi', hermes:'Hermes'};
+  const map = {claude:'Claude Code', codex:'Codex', orca:'Orca', 'kimi-code':'Kimi Code', 'kimi-cli':'Kimi CLI',
+    pi:'Pi', hermes:'Hermes', aider:'Aider', opencode:'OpenCode', 'gemini-cli':'Gemini CLI',
+    cline:'Cline', 'qwen-code':'Qwen Code', windsurf:'Windsurf'};
   return map[tool] || tool;
 }
 
@@ -571,7 +712,6 @@ function updateStats() {
   const selected = getSelectedPaths();
   const selectedSessions = allSessions.filter(s => {
     if (selected.includes(s.path)) return true;
-    // Kimi 合并会话按 session_dir 选中
     if (s.session_dir && selected.includes(s.session_dir)) return true;
     return false;
   });
@@ -581,17 +721,62 @@ function updateStats() {
   document.getElementById('statSize').textContent = formatSize(selSize);
 }
 
-async function deleteSelected() {
+async function refreshTrashCount() {
+  try {
+    const data = await api('/api/trash');
+    document.getElementById('trashCount').textContent = '(' + data.items.length + ')';
+    document.getElementById('statTrash').textContent = data.items.length;
+  } catch (e) {}
+}
+
+function askDelete() {
   const paths = getSelectedPaths();
   if (paths.length === 0) { showToast('请先勾选要删除的会话', 'error'); return; }
-  if (!confirm(`确定删除选中的 ${paths.length} 个会话？此操作不可恢复。`)) return;
+  const selectedSessions = allSessions.filter(s => {
+    if (paths.includes(s.path)) return true;
+    if (s.session_dir && paths.includes(s.session_dir)) return true;
+    return false;
+  });
+  const size = selectedSessions.reduce((a, s) => a + (s.size || 0), 0);
+  const perTool = {};
+  selectedSessions.forEach(s => { perTool[toolName(s.tool)] = (perTool[toolName(s.tool)] || 0) + 1; });
+  const breakdown = Object.entries(perTool).map(([t, n]) => `${t}×${n}`).join('，');
+  const hasHermes = selectedSessions.some(s => s.tool === 'hermes');
+  const body = document.getElementById('confirmBody');
+  body.innerHTML = `
+    <div style="font-size:14px;line-height:1.8">
+      <p>将删除 <b>${paths.length}</b> 个文件/目录（<b>${breakdown}</b>），合计 <b>${formatSize(size)}</b>。</p>
+      <p style="color:#777;font-size:13px">默认移入回收站（<code>~/.agent-manager-trash</code>），可在回收站恢复。回收站占用的磁盘空间不会立即释放。</p>
+      <label style="display:flex;gap:8px;align-items:center;font-size:13px;color:#555;cursor:pointer">
+        <input type="checkbox" id="permanentDelete"> <span>永久删除（不经过回收站，<b>不可恢复</b>，立即释放空间）</span>
+      </label>
+      ${hasHermes ? '<div class="confirm-note">⚠️ 包含 Hermes 会话：Hermes 数据存于数据库中，始终为「永久删除」，无法恢复。</div>' : ''}
+    </div>`;
+  document.getElementById('confirmModal').classList.add('active');
+}
+
+function closeConfirm() {
+  document.getElementById('confirmModal').classList.remove('active');
+}
+
+async function doDelete() {
+  const permanent = document.getElementById('permanentDelete').checked;
+  const paths = getSelectedPaths();
+  closeConfirm();
   try {
     const res = await api('/api/delete', {
       method: 'POST',
       headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({paths})
+      body: JSON.stringify({paths, mode: permanent ? 'permanent' : 'trash'})
     });
-    showToast(`已删除 ${res.deleted.length} 个，失败 ${res.failed.length} 个`, res.failed.length ? 'error' : 'success');
+    const parts = [];
+    if (res.trashed && res.trashed.length) parts.push(`已移入回收站 ${res.trashed.length} 个`);
+    if (res.deleted && res.deleted.length) parts.push(`已永久删除 ${res.deleted.length} 个`);
+    if (res.failed && res.failed.length) parts.push(`失败 ${res.failed.length} 个`);
+    showToast(parts.join('，'), res.failed && res.failed.length ? 'error' : 'success');
+    if (res.failed && res.failed.length) {
+      console.warn('删除失败明细:', res.failed);
+    }
     loadSessions();
   } catch (e) {
     showToast('删除失败: ' + e.message, 'error');
@@ -608,6 +793,142 @@ async function cleanupStaleIndex() {
     showToast('清理失败: ' + e.message, 'error');
   }
 }
+
+function exportCsv() {
+  if (!allSessions.length) { showToast('没有可导出的数据', 'error'); return; }
+  const q = document.getElementById('searchInput').value.trim().toLowerCase();
+  const rows = (q ? allSessions.filter(s => {
+    return ((s.session_title || s.first_message || s.filename || s.cwd || s.session_group || s.dir || '')).toLowerCase().includes(q);
+  }) : allSessions);
+  if (!rows.length) { showToast('当前筛选条件下没有数据', 'error'); return; }
+  const esc = v => {
+    v = (v || '').toString();
+    return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v;
+  };
+  const header = ['工具','文件名','路径','会话标题','创建目录','大小(字节)','用户消息','助手消息','修改时间','分组'];
+  const lines = rows.map(s => [
+    toolName(s.tool), s.filename, s.path, s.session_title || s.first_message || '',
+    s.cwd || '', s.size || 0, s.user_count || 0, s.assistant_count || 0, s.mtime_human,
+    s.session_group || s.dir || ''
+  ].map(esc).join(','));
+  const csv = '\ufeff' + [header.map(esc).join(','), ...lines].join('\n');
+  const blob = new Blob([csv], {type: 'text/csv;charset=utf-8'});
+  const link = document.createElement('a');
+  const now = new Date();
+  const stamp = `${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}`;
+  link.href = URL.createObjectURL(blob);
+  link.download = `agent-sessions-${stamp}.csv`;
+  document.body.appendChild(link);
+  link.click();
+  URL.revokeObjectURL(link.href);
+  link.remove();
+  showToast(`已导出 ${rows.length} 行 CSV`);
+}
+
+function copyPath(encodedPath) {
+  const path = decodeURIComponent(encodedPath);
+  const done = () => showToast('路径已复制: ' + (path.length > 60 ? path.slice(0, 60) + '...' : path));
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(path).then(done).catch(() => { fallbackCopy(path); done(); });
+  } else {
+    fallbackCopy(path); done();
+  }
+}
+
+function fallbackCopy(text) {
+  const ta = document.createElement('textarea');
+  ta.value = text;
+  ta.style.position = 'fixed';
+  ta.style.opacity = '0';
+  document.body.appendChild(ta);
+  ta.select();
+  try { document.execCommand('copy'); } catch (e) {}
+  ta.remove();
+}
+
+/* ---------------- 回收站 ---------------- */
+
+async function openTrash() {
+  document.getElementById('trashModal').classList.add('active');
+  document.getElementById('trashBody').innerHTML = '<div class="loading">加载中...</div>';
+  try {
+    const data = await api('/api/trash');
+    document.getElementById('trashModalCount').textContent = `（${data.items.length} 条 · ~${formatSize(data.items.reduce((a, i) => a + (i.size || 0), 0))}）`;
+    const body = document.getElementById('trashBody');
+    if (!data.items.length) {
+      body.innerHTML = '<div class="empty">回收站是空的 —— 删除会话时其实只是移到了这里，随时可以恢复或彻底清除。</div>';
+      return;
+    }
+    let html = '<table class="trash-table"><thead><tr><th>原路径</th><th style="width:90px">大小</th><th style="width:150px">删除时间</th><th style="width:150px">操作</th></tr></thead><tbody>';
+    for (const it of data.items) {
+      const warn = it.exists ? '' : ' <span style="color:#ff3b30;font-size:12px">(数据缺失)</span>';
+      html += `<tr>
+        <td style="word-break:break-all;font-family:monospace;font-size:12px;color:#555" title="${escapeHtml(it.original)}">${escapeHtml(it.display_path)}${warn}</td>
+        <td>${it.size_human}</td>
+        <td>${escapeHtml(it.trashed_at)}</td>
+        <td class="op">
+          <button class="restore" ${it.exists ? '' : 'disabled'} onclick="restoreTrashItem('${it.id}')">恢复</button>
+          <button class="del" onclick="deleteTrashItem('${it.id}')">永久删除</button>
+        </td>
+      </tr>`;
+    }
+    html += '</tbody></table><div style="margin-top:12px;font-size:12px;color:#999">回收站目录：' + escapeHtml(data.root) + '</div>';
+    body.innerHTML = html;
+  } catch (e) {
+    document.getElementById('trashBody').innerHTML = '<div class="empty">加载失败: ' + e.message + '</div>';
+  }
+}
+
+function closeTrash() {
+  document.getElementById('trashModal').classList.remove('active');
+}
+
+async function restoreTrashItem(id) {
+  try {
+    const res = await api('/api/trash/restore', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ids: [id]})
+    });
+    if (res.restored.length) {
+      showToast('已恢复 1 个条目');
+    } else if (res.failed.length) {
+      showToast('恢复失败: ' + res.failed[0].error, 'error');
+    }
+    openTrash();
+    refreshTrashCount();
+  } catch (e) {
+    showToast('恢复失败: ' + e.message, 'error');
+  }
+}
+
+async function deleteTrashItem(id) {
+  if (!confirm('从回收站彻底删除此条目？不可恢复。')) return;
+  try {
+    const res = await api('/api/trash/delete', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ids: [id]})
+    });
+    showToast(res.deleted.length ? '已彻底删除' : '删除失败: ' + (res.failed[0] || {}).error, res.deleted.length ? 'success' : 'error');
+    openTrash();
+    refreshTrashCount();
+  } catch (e) {
+    showToast('删除失败: ' + e.message, 'error');
+  }
+}
+
+async function emptyTrash() {
+  if (!confirm('确定清空回收站？所有条目将被彻底删除，不可恢复。')) return;
+  try {
+    const res = await api('/api/trash/empty', {method: 'POST'});
+    showToast(`已清空 ${res.removed} 个条目`);
+    openTrash();
+    refreshTrashCount();
+  } catch (e) {
+    showToast('清空失败: ' + e.message, 'error');
+  }
+}
+
+/* ---------------- 预览 ---------------- */
 
 async function previewSession(encodedPath) {
   const path = decodeURIComponent(encodedPath);
@@ -756,7 +1077,9 @@ function closeModal() {
   document.getElementById('previewModal').classList.remove('active');
 }
 
+document.getElementById('appVersion').textContent = 'v1.1.0';
 loadSessions();
+refreshTrashCount();
 </script>
 </body>
 </html>
