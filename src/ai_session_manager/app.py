@@ -26,6 +26,7 @@ from urllib.parse import parse_qs, urlparse
 from ai_session_manager import harness as harness_mod
 from ai_session_manager import skills_mgr as skills_mod
 from ai_session_manager import mcp_mgr as mcp_mod
+from ai_session_manager import env_report as env_mod
 
 
 def parse_date_arg(s, end_of_day=False):
@@ -1648,7 +1649,11 @@ class Handler(BaseHTTPRequestHandler):
             self._json_response({"items": list_trash_items(), "root": str(TRASH_ROOT)})
         # ---------- Harness 配置管理 ----------
         elif path == "/api/harness/list":
-            self._json_response({"items": harness_mod.harness_list(), "root": str(harness_mod.PI_AGENT_DIR)})
+            tool_f = qs.get("tool", [""])[0] or None
+            self._json_response({
+                "items": harness_mod.harness_list(tool_f),
+                "tools": harness_mod.active_tools(),
+            })
         elif path == "/api/harness/get":
             p = qs.get("path", [""])[0]
             if not p:
@@ -1660,19 +1665,26 @@ class Handler(BaseHTTPRequestHandler):
             r = harness_mod.harness_backups(qs.get("path", [""])[0])
             self._json_response(r)
         elif path == "/api/harness/health":
-            self._json_response(harness_mod.harness_health())
+            self._json_response(harness_mod.harness_health(qs.get("tool", [""])[0] or None))
         # ---------- Skill 管理 ----------
         elif path == "/api/skills/list":
-            self._json_response({"items": skills_mod.skills_list(qs.get("q", [""])[0]), "roots": [str(r) for r, _ in skills_mod.SKILL_ROOTS]})
+            self._json_response({
+                "items": skills_mod.skills_list(qs.get("q", [""])[0], qs.get("tool", [""])[0] or None),
+                "roots": [str(r) for r, _, _ in skills_mod.SKILL_ROOTS],
+            })
         elif path == "/api/skills/get":
             self._json_response(skills_mod.skill_get(qs.get("path", [""])[0]))
         # ---------- MCP 管理 ----------
         elif path == "/api/mcp/servers":
             self._json_response(mcp_mod.mcp_servers())
         elif path == "/api/mcp/tools":
-            self._json_response(mcp_mod.mcp_tools(qs.get("server", [""])[0] or None, qs.get("q", [""])[0] or None))
+            self._json_response(mcp_mod.mcp_tools(qs.get("server", [""])[0] or None, qs.get("q", [""])[0] or None, qs.get("source", [""])[0] or None))
         elif path == "/api/mcp/raw":
-            self._json_response(mcp_mod.mcp_raw())
+            self._json_response(mcp_mod.mcp_raw(qs.get("source", ["pi"])[0]))
+        elif path == "/api/env/report":
+            self._json_response(env_mod.env_report())
+        elif path == "/api/env/upgrade-status":
+            self._json_response(env_mod.upgrade_status(qs.get("tool", [""])[0]))
         else:
             self.send_error(404)
 
@@ -1775,6 +1787,13 @@ class Handler(BaseHTTPRequestHandler):
         elif parsed.path == "/api/skills/delete":
             data = self._json_body()
             r = skills_mod.skill_delete(data.get("path", ""))
+            self._json_response(r, 200 if r.get("ok") else 400)
+        elif parsed.path == "/api/env/upgrade":
+            data = self._json_body()
+            if not isinstance(data.get("tool"), str) or not data["tool"]:
+                self._json_response({"ok": False, "error": "缺少 tool 参数"}, 400)
+                return
+            r = env_mod.start_upgrade(data["tool"])
             self._json_response(r, 200 if r.get("ok") else 400)
         else:
             self.send_error(404)

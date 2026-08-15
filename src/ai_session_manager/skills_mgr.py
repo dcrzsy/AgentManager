@@ -13,11 +13,18 @@ from pathlib import Path
 HOME = Path.home()
 PI_AGENT_DIR = HOME / ".pi" / "agent"
 
-# 扫描根：用户级 skills + 全局 agent skills + 项目记忆中的 skills
+# 扫描根（多工具）：(目录, scope, 工具id)
 SKILL_ROOTS = [
-    (PI_AGENT_DIR / "skills", "user"),                  # ~/.pi/agent/skills
-    (HOME / ".agents" / "skills", "global"),            # ~/.agents/skills
-    (HOME / ".pi" / "agent" / "pi-hermes-memory" / "skills", "memory"),
+    (PI_AGENT_DIR / "skills",                     "user",    "pi"),
+    (HOME / ".agents" / "skills",                 "global",  "pi"),
+    (HOME / ".pi" / "agent" / "pi-hermes-memory" / "skills", "memory", "pi"),
+    # 其他工具的 skills 目录（存在才生效）
+    (HOME / ".claude" / "skills",                 "user",    "claude"),
+    (HOME / ".config" / "claude" / "skills",      "user",    "claude"),
+    (HOME / ".codex" / "skills",                  "user",    "codex"),
+    (HOME / ".config" / "orca" / "codex-runtime-home" / "home" / "skills", "user", "orca"),
+    (HOME / ".kimi-code" / "skills",              "user",    "kimi"),
+    (HOME / ".hermes" / "skills",                 "user",    "hermes"),
 ]
 
 _projects_memory = HOME / ".pi" / "agent" / "projects-memory"
@@ -25,7 +32,12 @@ if _projects_memory.is_dir():
     for proj in sorted(_projects_memory.iterdir()):
         skills_dir = proj / "skills"
         if skills_dir.is_dir():
-            SKILL_ROOTS.append((skills_dir, "project:" + proj.name))
+            SKILL_ROOTS.append((skills_dir, "project:" + proj.name, "pi"))
+
+TOOL_NAMES = {
+    "pi": "Pi", "claude": "Claude Code", "codex": "Codex",
+    "orca": "Orca", "kimi": "Kimi Code", "hermes": "Hermes",
+}
 
 
 def _find_skill_dirs(root):
@@ -38,7 +50,6 @@ def _find_skill_dirs(root):
             if f.is_dir():
                 if (f / "SKILL.md").is_file():
                     out.append(f)
-                # 域名目录如 @user_ec205dbb/xxx
                 out.extend(_find_skill_dirs(f))
             elif f.name == "SKILL.md":
                 out.append(f.parent)
@@ -66,11 +77,13 @@ def _parse_frontmatter(text):
     return fm, body.strip()
 
 
-def skills_list(q=None):
-    """扫描所有 skills 根，返回清单"""
+def skills_list(q=None, tool=None):
+    """扫描所有 skills 根，返回清单（可按工具过滤）"""
     items = []
     seen = set()
-    for root, scope in SKILL_ROOTS:
+    for root, scope, tid in SKILL_ROOTS:
+        if tool and tid != tool:
+            continue
         for d in _find_skill_dirs(root):
             skill_file = d / "SKILL.md"
             if not skill_file.is_file():
@@ -94,6 +107,8 @@ def skills_list(q=None):
             items.append({
                 "name": name,
                 "description": fm.get("description", ""),
+                "tool": tid,
+                "tool_name": TOOL_NAMES.get(tid, tid),
                 "scope": scope,
                 "root": str(root),
                 "root_display": str(root).replace(str(HOME), "~"),

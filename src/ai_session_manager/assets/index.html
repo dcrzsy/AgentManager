@@ -362,6 +362,29 @@ tbody tr:hover .op-cell .op-preview, tr.selected .op-cell .op-preview { visibili
 .tool-row .t-copy { border: none; background: none; cursor: pointer; color: var(--faint); font-size: 12px; padding: 2px 4px; border-radius: 4px; }
 .tool-row .t-copy:hover { color: var(--primary); background: var(--primary-soft); }
 
+.env-tool-card { padding: 14px 16px; margin-bottom: 10px; }
+.env-tool-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.env-tool-head .e-name { font-weight: 700; font-size: 14.5px; }
+.env-tool-head .e-ver { font-family: var(--mono); font-size: 12.5px; color: var(--primary); background: var(--primary-soft); padding: 2px 10px; border-radius: 12px; }
+.env-tool-head .e-method { font-size: 11.5px; color: var(--faint); border: 1px solid var(--border); padding: 1px 8px; border-radius: 10px; }
+.env-tool-head .e-running { font-size: 11px; color: var(--ok); background: #e9fbf3; padding: 1px 8px; border-radius: 10px; }
+[data-theme="dark"] .env-tool-head .e-running { background: #123528; }
+.env-tool-head .spacer { flex: 1; }
+.env-bin { display: flex; align-items: center; gap: 8px; margin-top: 8px; font-family: var(--mono); font-size: 11.5px; color: var(--faint); flex-wrap: wrap; }
+.env-bin .b-path { word-break: break-all; }
+.env-bin .b-ver { color: var(--muted); }
+.env-bin .dup { color: var(--warn); }
+.env-config { margin-top: 6px; font-size: 11.5px; color: var(--faint); font-family: var(--mono); }
+.problem-card { padding: 12px 16px; margin-bottom: 10px; display: flex; gap: 10px; align-items: flex-start; }
+.problem-card .p-ico { font-size: 15px; margin-top: 1px; }
+.problem-card .p-msg { font-size: 13px; font-weight: 600; }
+.problem-card .p-detail { font-size: 12px; color: var(--faint); font-family: var(--mono); margin-top: 3px; word-break: break-all; }
+.problem-card.error { border-color: var(--danger); }
+.problem-card.warn { border-color: var(--warn); }
+.problem-card.update { border-color: var(--primary); }
+.problem-card.info { border-color: var(--border-strong); }
+.upgrade-console { background: #10131a; color: #d6e0f0; font-family: var(--mono); font-size: 11.5px; padding: 12px; border-radius: 8px; min-height: 120px; max-height: 260px; overflow: auto; white-space: pre-wrap; margin-top: 10px; }
+[data-theme="light"] .upgrade-console { background: #1b2230; color: #cfd8ea; }
 /* ============ 弹窗 ============ */
 .modal-overlay {
   position: fixed; inset: 0; background: rgba(10,15,30,.55);
@@ -457,6 +480,10 @@ tbody tr:hover .op-cell .op-preview, tr.selected .op-cell .op-preview { visibili
       <button class="nav-item" data-view="mcp" onclick="showView('mcp')">
         <span class="nav-ico">🔌</span><span class="nav-txt">MCP 管理</span>
         <span class="nav-badge" id="navMcpBadge"></span>
+      </button>
+      <button class="nav-item" data-view="env" onclick="showView('env')">
+        <span class="nav-ico">🖥️</span><span class="nav-txt">环境检测</span>
+        <span class="nav-badge" id="navEnvBadge"></span>
       </button>
     </nav>
     <div class="sidebar-foot">
@@ -651,6 +678,42 @@ tbody tr:hover .op-cell .op-preview, tr.selected .op-cell .op-preview { visibili
       </div>
       <div id="mcpContent"></div>
     </div>
+
+    <!-- ===== 视图: 环境检测 ===== -->
+    <div class="view" id="view-env">
+      <div class="view-head">
+        <h2>🖥️ 环境检测</h2>
+        <span class="view-sub">检测已安装工具、版本、多版本冲突与可用更新（升级需确认后执行）</span>
+      </div>
+      <div class="stats-row">
+        <div class="card stat-card accent">
+          <div class="stat-label">已安装工具</div>
+          <div class="stat-value" id="envInstalled">0</div>
+          <div class="stat-sub">共检测 N 个</div>
+          <span class="stat-ico">🧩</span>
+        </div>
+        <div class="card stat-card red">
+          <div class="stat-label">环境问题</div>
+          <div class="stat-value" id="envProblems">0</div>
+          <div class="stat-sub">含冲突/缺失/更新</div>
+          <span class="stat-ico">⚠️</span>
+        </div>
+        <div class="card stat-card">
+          <div class="stat-label">可升级</div>
+          <div class="stat-value" id="envUpgradeable">0</div>
+          <div class="stat-sub">白名单命令支持</div>
+          <span class="stat-ico">⬆️</span>
+        </div>
+        <div class="card stat-card">
+          <div class="stat-label">Node / Python</div>
+          <div class="stat-value" id="envSysVer" style="font-size:17px">-</div>
+          <div class="stat-sub" id="envSysSub"></div>
+          <span class="stat-ico">⚙️</span>
+        </div>
+      </div>
+      <div id="envProblemsPanel"></div>
+      <div id="envTools"></div>
+    </div>
   </main>
 </div>
 
@@ -823,6 +886,7 @@ function showView(name) {
   if (name === 'harness') loadHarness();
   if (name === 'skills') loadSkills();
   if (name === 'mcp') loadMcp();
+  if (name === 'env') loadEnv();
 }
 
 /* ================================================================
@@ -1832,6 +1896,132 @@ async function openMcpRaw() {
     if (d.error) { showToast(d.error, 'error'); return; }
     openGeneric('📜 mcp-cache.json（原始配置）', `<pre style="max-height:65vh">${escapeHtml(d.content)}</pre>`);
   } catch (e) { showToast('加载失败: ' + e.message, 'error'); }
+}
+
+/* ================================================================
+   环境检测与升级
+   ================================================================ */
+let envCache = null;
+let envUpgradeTimers = {};
+
+async function loadEnv() {
+  document.getElementById('envTools').innerHTML = '<div class="card skeleton">' + Array.from({ length: 4 }, () =>
+    '<div class="sk-row"><div class="sk" style="flex:1"></div><div class="sk" style="flex:2"></div><div class="sk" style="width:100px"></div></div>').join('') + '</div>';
+  try {
+    const d = await api('/api/env/report');
+    envCache = d;
+    const installed = d.tools.filter(t => t.installed).length;
+    document.getElementById('envInstalled').textContent = installed;
+    document.getElementById('envInstalled').parentElement.querySelector('.stat-sub').textContent = `共检测 ${d.tools.length} 个工具`;
+    document.getElementById('envProblems').textContent = d.problem_count;
+    document.getElementById('envUpgradeable').textContent = d.upgradeable.length;
+    document.getElementById('envSysVer').textContent = (d.system.node || '').replace('v', 'Node ') + ' · Py' + (d.system.python || '').match(/[\d.]+/);
+    document.getElementById('envSysSub').textContent = `${d.system.platform} / ${d.system.arch} · npm ${d.system.npm}`;
+    document.getElementById('navEnvBadge').textContent = d.problem_count;
+    renderEnvProblems(d.problems);
+    renderEnvTools(d.tools);
+  } catch (e) {
+    document.getElementById('envTools').innerHTML = '<div class="empty-state"><div class="e-title">检测失败</div><div class="e-hint">' + escapeHtml(e.message) + '</div></div>';
+  }
+}
+
+function renderEnvProblems(problems) {
+  const panel = document.getElementById('envProblemsPanel');
+  if (!problems.length) {
+    panel.innerHTML = '<div class="card problem-card" style="border-color:var(--ok)"><span class="p-ico">✅</span><div><div class="p-msg" style="color:var(--ok)">环境状态良好，未发现问题</div></div></div>';
+    return;
+  }
+  const ico = { error: '🔴', warn: '🟠', update: '🔵', info: 'ℹ️' };
+  panel.innerHTML = problems.map(p => `
+    <div class="card problem-card ${p.level}">
+      <span class="p-ico">${ico[p.level] || 'ℹ️'}</span>
+      <div style="flex:1">
+        <div class="p-msg">${escapeHtml(p.message)}</div>
+        ${p.detail ? `<div class="p-detail">${escapeHtml(p.detail)}</div>` : ''}
+      </div>
+      ${p.tool && envCache && envCache.upgradeable.includes(p.tool) ? `<button class="btn sm primary" onclick="openUpgrade('${p.tool}')">⬆️ 升级</button>` : ''}
+    </div>`).join('');
+}
+
+function renderEnvTools(tools) {
+  const el = document.getElementById('envTools');
+  let html = '';
+  for (const t of tools) {
+    if (!t.installed) {
+      html += `<div class="card env-tool-card">
+        <div class="env-tool-head">
+          <span class="e-name">${escapeHtml(t.name)}</span>
+          <span class="e-method">未安装</span>
+          ${t.not_installed_latest ? `<span class="e-ver" style="background:var(--card-2);color:var(--muted)">npm 最新 ${escapeHtml(t.not_installed_latest)}</span>` : ''}
+          ${envCache.upgradeable.includes(t.id) ? `<button class="btn sm primary" onclick="openUpgrade('${t.id}')">⬆️ 安装/升级</button>` : ''}
+        </div>
+        ${t.config_dir ? `<div class="env-config">配置目录：${escapeHtml(t.config_dir.replace(HOME_DIR, '~'))}</div>` : ''}
+      </div>`;
+      continue;
+    }
+    const bins = (t.bins || []).map((b, i) => `
+      <span class="b-path">${escapeHtml(b.path)}${t.multiple_install ? '<span class="dup">（实例 ' + (i + 1) + '）</span>' : ''}</span>
+      <span class="b-ver">${escapeHtml(b.version || '版本未知')}</span>`).join('<span style="color:var(--border)">|</span>');
+    html += `<div class="card env-tool-card">
+      <div class="env-tool-head">
+        <span class="e-name">${escapeHtml(t.name)}</span>
+        <span class="e-ver">${escapeHtml(t.version || '版本未知')}</span>
+        <span class="e-method">${escapeHtml(t.install_method)}</span>
+        ${t.multiple_install ? '<span class="e-method" style="color:var(--warn);border-color:var(--warn)">多实例</span>' : ''}
+        ${t.running ? '<span class="e-running">● 运行中</span>' : ''}
+        <span class="spacer"></span>
+        ${envCache.upgradeable.includes(t.id) ? `<button class="btn sm primary" onclick="openUpgrade('${t.id}')">⬆️ 升级</button>` : (t.npm_pkg ? '<span style="font-size:11px;color:var(--faint)">npm: ' + escapeHtml(t.npm_pkg) + '</span>' : '')}
+      </div>
+      <div class="env-bin">${bins}</div>
+      ${t.config_dir ? `<div class="env-config">配置目录：${escapeHtml(t.config_dir.replace(HOME_DIR, '~'))}</div>` : ''}
+    </div>`;
+  }
+  el.innerHTML = html || '<div class="empty-state"><div class="e-title">无可检测工具</div></div>';
+}
+
+function openUpgrade(toolId) {
+  const t = (envCache.tools.find(x => x.id === toolId) || {});
+  let cmd = '';
+  try { cmd = window._upgradeCmds ? (window._upgradeCmds[toolId] || '') : ''; } catch (e) {}
+  const body = `
+    <div style="font-size:13.5px;line-height:1.9">
+      <p>将执行升级命令<code id="upgradeCmdShown" style="font-family:var(--mono);background:var(--card-2);padding:2px 8px;border-radius:6px"></code></p>
+      <p style="color:var(--muted);font-size:12.5px">升级 <b>${escapeHtml(t.name || toolId)}</b>（当前 ${escapeHtml(t.version || '未知')}）。执行期间不要关闭本页面；完成后可在此查看输出。</p>
+      <div class="upgrade-console" id="upgradeConsole">准备中…</div>
+    </div>`;
+  const footer = `
+    <button class="btn" onclick="closeGeneric()">关闭</button>
+    <button class="btn primary" id="upgradeRunBtn" onclick="runUpgrade('${toolId}')">⬆️ 开始升级</button>`;
+  openGeneric('⬆️ 升级 ' + (t.name || toolId), body, footer);
+  const cmds = { claude: 'npm update -g @anthropic-ai/claude-code', codex: 'npm update -g @openai/codex', pi: 'npm update -g @earendil-works/pi-coding-agent', aider: 'pip install -U aider-chat', gemini: 'npm update -g @google/gemini-cli' };
+  document.getElementById('upgradeCmdShown').textContent = cmds[toolId] || '官方渠道手动更新';
+  if (!cmds[toolId]) document.getElementById('upgradeRunBtn').disabled = true;
+}
+
+async function runUpgrade(toolId) {
+  const consoleEl = document.getElementById('upgradeConsole');
+  document.getElementById('upgradeRunBtn').disabled = true;
+  consoleEl.textContent = '启动升级…';
+  try {
+    const r = await api('/api/env/upgrade', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tool: toolId }) });
+    if (!r.ok) { consoleEl.textContent = '❌ ' + r.error; return; }
+    consoleEl.textContent = '⏳ 执行中…（输出实时滚动，完成后自动刷新状态）';
+    // 轮询状态
+    clearInterval(envUpgradeTimers[toolId]);
+    envUpgradeTimers[toolId] = setInterval(async () => {
+      try {
+        const st = await api('/api/env/upgrade-status?tool=' + toolId);
+        if (st.output) consoleEl.textContent = st.output.slice(-4000);
+        if (st.done) {
+          clearInterval(envUpgradeTimers[toolId]);
+          consoleEl.textContent = (st.code === 0 ? '✅ 升级成功（退出码 0）\n' : '❌ 升级失败（退出码 ' + st.code + '）\n') + consoleEl.textContent;
+          document.getElementById('upgradeRunBtn').textContent = '重新升级';
+          document.getElementById('upgradeRunBtn').disabled = false;
+          loadEnv();
+        }
+      } catch (e) {}
+    }, 1500);
+  } catch (e) { consoleEl.textContent = '❌ ' + e.message; }
 }
 
 /* ================= 通用弹窗 ================= */
