@@ -257,6 +257,7 @@ def harness_get(path_str, limit=200000):
         "name": p.name,
         "tool": tool,
         "tool_name": HARNESS_TOOLS[tool]["name"] if tool else "",
+        "editable": p.suffix.lower() in EDITABLE_EXTS,
         "is_json": is_json,
         "size": p.stat().st_size,
         "parsed": parsed,

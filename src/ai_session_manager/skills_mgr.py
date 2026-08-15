@@ -212,7 +212,7 @@ def skill_delete(path_str):
     d = Path(path_str).expanduser()
     root = d.parent
     # 安全检查：必须位于 skills 根下
-    allowed = [str(r) for r, _ in SKILL_ROOTS]
+    allowed = [str(r) for r, _, _ in SKILL_ROOTS]
     if not any(str(root).startswith(r + "/") or str(root) == r for r in allowed):
         return {"ok": False, "error": "路径不在 skills 根目录下"}
     if not (d / "SKILL.md").is_file():

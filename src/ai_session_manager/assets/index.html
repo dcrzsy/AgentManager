@@ -344,6 +344,13 @@ tbody tr:hover .op-cell .op-preview, tr.selected .op-cell .op-preview { visibili
 .skill-form textarea { font-family: var(--mono); font-size: 12.5px; min-height: 200px; resize: vertical; }
 
 /* ============ MCP 视图 ============ */
+.mcp-src-head { display: flex; align-items: center; gap: 10px; padding: 11px 16px; cursor: pointer; background: var(--card-2); border-bottom: 1px solid var(--border); }
+.mcp-src-head:hover { background: var(--hover); }
+.mcp-src-head .s-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--primary); flex-shrink: 0; }
+.mcp-src-head .s-name { font-weight: 700; font-size: 13.5px; white-space: nowrap; }
+.mcp-src-head .s-meta { font-size: 11.5px; color: var(--faint); font-family: var(--mono); white-space: nowrap; }
+.mcp-src-head .s-path { font-size: 11px; color: var(--faint); font-family: var(--mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mcp-src-body.collapsed { display: none; }
 .mcp-server { margin-bottom: 12px; }
 .mcp-server-head { display: flex; align-items: center; gap: 10px; padding: 13px 16px; cursor: pointer; }
 .mcp-server-head:hover { background: var(--hover); }
@@ -1812,11 +1819,16 @@ async function loadMcp() {
   try {
     const data = await api('/api/mcp/servers');
     mcpCache = data;
-    document.getElementById('mcpServerCount').textContent = num(data.servers.length);
+    document.getElementById('mcpServerCount').textContent = num(data.total_servers);
     document.getElementById('mcpToolCount').textContent = num(data.total_tools);
-    document.getElementById('mcpCacheSize').textContent = data.cache_size_human;
-    document.getElementById('mcpCacheMeta').textContent = '更新于 ' + data.cache_mtime;
-    document.getElementById('navMcpBadge').textContent = data.servers.length + '/' + data.total_tools;
+    const piSrc = (data.sources || []).find(s => s.tool === 'pi');
+    if (piSrc) {
+      document.getElementById('mcpCacheSize').textContent = piSrc.size_human;
+      document.getElementById('mcpCacheMeta').textContent = 'pi 缓存更新于 ' + piSrc.mtime;
+    } else {
+      document.getElementById('mcpCacheMeta').textContent = '无 pi 缓存（工具明细不可用）';
+    }
+    document.getElementById('navMcpBadge').textContent = data.total_servers + '/' + data.total_tools;
     renderMcp();
   } catch (e) {
     document.getElementById('mcpContent').innerHTML = '<div class="empty-state"><div class="e-title">加载失败</div><div class="e-hint">' + escapeHtml(e.message) + '</div></div>';
@@ -1825,46 +1837,66 @@ async function loadMcp() {
 function renderMcp() {
   const q = document.getElementById('mcpSearch').value.trim().toLowerCase();
   const el = document.getElementById('mcpContent');
-  if (!mcpCache || !mcpCache.servers.length) {
-    el.innerHTML = '<div class="card empty-state"><div class="e-ico">🔌</div><div class="e-title">没有发现 MCP 服务器</div><div class="e-hint">pi 的 mcp-cache.json 为空或不存在。</div></div>';
+  if (!mcpCache || !mcpCache.sources.length) {
+    el.innerHTML = '<div class="card empty-state"><div class="e-ico">🔌</div><div class="e-title">没有发现 MCP 配置源</div><div class="e-hint">未检测到任何工具的 MCP 配置文件。</div></div>';
     return;
   }
+  if (q) { loadAllToolDetails(q); return; }
   let html = '';
-  for (const srv of mcpCache.servers) {
-    const collapsed = lsGet('mcp.collapsed.' + srv.name, '0') === '1';
-    const toolsPreview = srv.tools_summary.map(t =>
-      `<span class="chip" title="${escapeHtml(t.description || '')}">${escapeHtml(t.name)}</span>`).join('') +
-      (srv.tool_count > 5 ? `<span class="chip">+${srv.tool_count - 5}…</span>` : '');
-    html += `<div class="card mcp-server${collapsed ? ' collapsed' : ''}" data-server="${escapeHtml(srv.name)}">
-      <div class="mcp-server-head" onclick="toggleMcpServer(this)">
-        <span class="m-dot"></span>
-        <span class="m-name">${escapeHtml(srv.name)}</span>
-        <span class="m-meta">${srv.tool_count} 工具 · hash ${escapeHtml(srv.config_hash)}</span>
+  for (const src of mcpCache.sources) {
+    const srcCollapsed = lsGet('mcp.src.' + src.tool, '0') === '1';
+    html += `<div class="card" style="margin-bottom:12px;overflow:hidden">
+      <div class="mcp-src-head${srcCollapsed ? ' collapsed' : ''}" onclick="toggleMcpSource(this)" data-src="${escapeHtml(src.tool)}">
+        <span class="s-dot"></span>
+        <span class="s-name">${escapeHtml(src.tool_name)}</span>
+        <span class="s-meta">${src.server_count} 服务器 · ${src.tool_count} 工具</span>
+        <span class="s-path">${escapeHtml(src.config_path.replace(HOME_DIR, '~'))}</span>
+        <button class="btn sm" style="margin-left:auto" onclick="event.stopPropagation();openMcpRaw('${escapeHtml(src.tool)}')" title="查看原始配置">📜 原始</button>
         <span class="m-arrow">▼</span>
       </div>
-      ${collapsed ? '' : `<div class="mcp-tools" style="padding:10px 16px">${toolsPreview}</div>
-      <div class="mcp-tools" id="mcpTools-${escapeHtml(srv.name)}" data-loaded="0" style="padding:0"></div>`}
-    </div>`;
+      <div class="mcp-src-body${srcCollapsed ? ' collapsed' : ''}">`;
+    for (const srv of src.servers) {
+      const collapsed = lsGet('mcp.collapsed.' + src.tool + '.' + srv.name, srv.tool_count ? '0' : '1') === '1';
+      html += `<div class="mcp-server${collapsed ? ' collapsed' : ''}" data-server="${escapeHtml(srv.name)}" data-src="${escapeHtml(src.tool)}" data-has-tools="${srv.tool_count ? 1 : 0}">
+        <div class="mcp-server-head" onclick="toggleMcpServer(this)">
+          <span class="m-dot" style="background:${srv.type === 'error' ? 'var(--danger)' : 'var(--ok)'}"></span>
+          <span class="m-name">${escapeHtml(srv.name)}</span>
+          <span class="m-meta">${escapeHtml(srv.type)}${srv.tool_count ? ' · ' + srv.tool_count + ' 工具' : ''}${srv.config_hash ? ' · ' + escapeHtml(srv.config_hash) : ''}</span>
+          ${srv.detail ? `<span class="m-meta" style="max-width:340px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(srv.detail)}</span>` : ''}
+          ${srv.env_keys && srv.env_keys.length ? `<span class="m-meta">env: ${srv.env_keys.map(e => e.masked ? '🔒' + escapeHtml(e.key) : escapeHtml(e.key)).join(', ')}</span>` : ''}
+          <span class="m-arrow">▼</span>
+        </div>
+        ${collapsed ? '' : (srv.tool_count ? `<div class="mcp-tools" style="padding:0" id="mcpTools-${escapeHtml(src.tool)}-${escapeHtml(srv.name)}" data-loaded="0"></div>` : '')}
+      </div>`;
+    }
+    html += '</div></div>';
   }
   el.innerHTML = html;
-  if (q) loadAllToolDetails(q);
+}
+function toggleMcpSource(header) {
+  const src = header.dataset.src;
+  const was = header.classList.toggle('collapsed');
+  header.nextElementSibling.classList.toggle('collapsed', was);
+  lsSet('mcp.src.' + src, was ? '1' : '0');
 }
 function toggleMcpServer(header) {
   const box = header.closest('.mcp-server');
+  if (!box.dataset.hasTools || box.dataset.hasTools === '0') return; // 无工具缓存的源只展示定义
   const name = box.dataset.server;
+  const src = box.dataset.src;
   const wasCollapsed = box.classList.toggle('collapsed');
-  lsSet('mcp.collapsed.' + name, wasCollapsed ? '1' : '0');
+  lsSet('mcp.collapsed.' + src + '.' + name, wasCollapsed ? '1' : '0');
   if (!wasCollapsed && !box.querySelector('[data-loaded="1"]')) {
-    renderMcpServerTools(name, box);
+    renderMcpServerTools(src, name, box);
   }
 }
-async function renderMcpServerTools(name, box) {
-  const container = box.querySelector('#mcpTools-' + CSS.escape(name));
+async function renderMcpServerTools(srcTool, name, box) {
+  const container = box.querySelector('[data-loaded]');
   if (!container) return;
   container.dataset.loaded = '1';
   container.innerHTML = '<div class="empty-state" style="padding:16px"><div class="e-ico">⏳</div><div class="e-title" style="font-size:13px">加载工具…</div></div>';
   try {
-    const data = await api('/api/mcp/tools?server=' + encodeURIComponent(name));
+    const data = await api('/api/mcp/tools?server=' + encodeURIComponent(name) + '&source=' + encodeURIComponent(srcTool));
     container.innerHTML = renderToolRows(data.items || []);
   } catch (e) {
     container.innerHTML = '<div class="empty-state" style="padding:16px"><div class="e-title" style="font-size:13px">加载失败</div></div>';
@@ -1890,11 +1922,12 @@ async function loadAllToolDetails(q) {
       <div class="card">${renderToolRows(data.items || [])}</div>`;
   } catch (e) {}
 }
-async function openMcpRaw() {
+async function openMcpRaw(sourceTool) {
+  const s = (mcpCache && mcpCache.sources || []).find(x => x.tool === sourceTool);
   try {
-    const d = await api('/api/mcp/raw');
+    const d = await api('/api/mcp/raw?source=' + encodeURIComponent(sourceTool || 'pi'));
     if (d.error) { showToast(d.error, 'error'); return; }
-    openGeneric('📜 mcp-cache.json（原始配置）', `<pre style="max-height:65vh">${escapeHtml(d.content)}</pre>`);
+    openGeneric('📜 ' + (d.tool_name || 'MCP') + ' 原始配置', `<pre style="max-height:65vh">${escapeHtml(d.content)}</pre>`);
   } catch (e) { showToast('加载失败: ' + e.message, 'error'); }
 }
 
