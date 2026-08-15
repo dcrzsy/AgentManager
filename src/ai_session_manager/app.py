@@ -22,6 +22,11 @@ from http.server import BaseHTTPRequestHandler, HTTPServer, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
+# 功能模块：Harness 配置 / Skill / MCP
+from ai_session_manager import harness as harness_mod
+from ai_session_manager import skills_mgr as skills_mod
+from ai_session_manager import mcp_mgr as mcp_mod
+
 
 def parse_date_arg(s, end_of_day=False):
     """解析 YYYY-MM-DD 为时间戳。end_of_day=True 时为当天 23:59:59。解析失败返回 None。"""
@@ -1530,8 +1535,9 @@ def _load_html_page():
         html = "<html><body>无法加载前端页面</body></html>"
 
     html = html.replace('const HOME_DIR = "";', f'const HOME_DIR = "{str(HOME)}";')
-    # 注入后端版本号
-    html = html.replace('id="appVersion">v1.1.0<', f'id="appVersion">v{__version__}<')
+    # 注入后端版本号（匹配任意 vX.Y.Z）
+    import re as _re
+    html = _re.sub(r'id="appVersion">v[\d.]+<', f'id="appVersion">v{__version__}<', html)
     return html
 
 class Handler(BaseHTTPRequestHandler):
@@ -1640,6 +1646,33 @@ class Handler(BaseHTTPRequestHandler):
                 self._json_response({"error": str(e)}, 500)
         elif path == "/api/trash":
             self._json_response({"items": list_trash_items(), "root": str(TRASH_ROOT)})
+        # ---------- Harness 配置管理 ----------
+        elif path == "/api/harness/list":
+            self._json_response({"items": harness_mod.harness_list(), "root": str(harness_mod.PI_AGENT_DIR)})
+        elif path == "/api/harness/get":
+            p = qs.get("path", [""])[0]
+            if not p:
+                self._json_response({"error": "缺少 path 参数"}, 400)
+                return
+            r = harness_mod.harness_masked(p)
+            self._json_response(r)
+        elif path == "/api/harness/backups":
+            r = harness_mod.harness_backups(qs.get("path", [""])[0])
+            self._json_response(r)
+        elif path == "/api/harness/health":
+            self._json_response(harness_mod.harness_health())
+        # ---------- Skill 管理 ----------
+        elif path == "/api/skills/list":
+            self._json_response({"items": skills_mod.skills_list(qs.get("q", [""])[0]), "roots": [str(r) for r, _ in skills_mod.SKILL_ROOTS]})
+        elif path == "/api/skills/get":
+            self._json_response(skills_mod.skill_get(qs.get("path", [""])[0]))
+        # ---------- MCP 管理 ----------
+        elif path == "/api/mcp/servers":
+            self._json_response(mcp_mod.mcp_servers())
+        elif path == "/api/mcp/tools":
+            self._json_response(mcp_mod.mcp_tools(qs.get("server", [""])[0] or None, qs.get("q", [""])[0] or None))
+        elif path == "/api/mcp/raw":
+            self._json_response(mcp_mod.mcp_raw())
         else:
             self.send_error(404)
 
@@ -1717,6 +1750,32 @@ class Handler(BaseHTTPRequestHandler):
         elif parsed.path == "/api/trash/empty":
             count = empty_trash()
             self._json_response({"removed": count})
+        # ---------- Harness 配置管理 ----------
+        elif parsed.path == "/api/harness/save":
+            data = self._json_body()
+            r = harness_mod.harness_save(data.get("path", ""), data.get("content", ""))
+            self._json_response(r, 200 if r.get("ok") else 400)
+        elif parsed.path == "/api/harness/restore":
+            data = self._json_body()
+            r = harness_mod.harness_restore(data.get("path", ""), data.get("backup", ""))
+            self._json_response(r, 200 if r.get("ok") else 400)
+        elif parsed.path == "/api/harness/delete-backup":
+            data = self._json_body()
+            r = harness_mod.harness_delete_backup(data.get("backup", ""))
+            self._json_response(r, 200 if r.get("ok") else 400)
+        # ---------- Skill 管理 ----------
+        elif parsed.path == "/api/skills/create":
+            data = self._json_body()
+            r = skills_mod.skill_create(data.get("name", ""), data.get("description", ""), data.get("content", ""), data.get("scope", "user"))
+            self._json_response(r, 200 if r.get("ok") else 400)
+        elif parsed.path == "/api/skills/update":
+            data = self._json_body()
+            r = skills_mod.skill_update(data.get("path", ""), data.get("content", ""))
+            self._json_response(r, 200 if r.get("ok") else 400)
+        elif parsed.path == "/api/skills/delete":
+            data = self._json_body()
+            r = skills_mod.skill_delete(data.get("path", ""))
+            self._json_response(r, 200 if r.get("ok") else 400)
         else:
             self.send_error(404)
 

@@ -27,6 +27,7 @@
   --radius: 12px;
   --radius-sm: 8px;
   --mono: "SF Mono", "JetBrains Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  --sidebar-w: 208px;
 }
 [data-theme="dark"] {
   --bg: #0e1117;
@@ -59,33 +60,53 @@ body {
   line-height: 1.55;
   transition: background .25s, color .25s;
 }
-.container { max-width: 1480px; margin: 0 auto; padding: 0 20px 40px; }
 
-/* ============ 顶部 ============ */
-.topbar {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 16px 0 14px; margin-bottom: 14px;
-  border-bottom: 1px solid var(--border);
+/* ============ 布局 ============ */
+.layout { display: flex; min-height: 100vh; }
+.sidebar {
+  width: var(--sidebar-w); flex-shrink: 0;
+  background: var(--card);
+  border-right: 1px solid var(--border);
+  padding: 16px 12px;
+  display: flex; flex-direction: column;
+  position: sticky; top: 0; height: 100vh;
 }
-.brand { display: flex; align-items: center; gap: 10px; }
-.brand .logo {
-  width: 34px; height: 34px; border-radius: 9px;
+.sidebar .brand { display: flex; align-items: center; gap: 8px; padding: 4px 8px 16px; }
+.sidebar .brand .logo {
+  width: 30px; height: 30px; border-radius: 8px;
   background: linear-gradient(135deg, #0a6cff, #6c5ce7);
   display: flex; align-items: center; justify-content: center;
-  font-size: 18px; color: #fff;
-  box-shadow: 0 4px 12px rgba(10,108,255,.35);
+  font-size: 16px; color: #fff;
 }
-.brand h1 { font-size: 18px; margin: 0; letter-spacing: .3px; }
-.brand .version { font-size: 11px; color: var(--faint); background: var(--card-2); border: 1px solid var(--border); padding: 2px 8px; border-radius: 20px; margin-left: 6px; }
-.topbar .right { display: flex; align-items: center; gap: 10px; }
-.icon-btn {
-  border: 1px solid var(--border); background: var(--card); color: var(--muted);
-  width: 34px; height: 34px; border-radius: 9px; cursor: pointer; font-size: 15px;
-  display: flex; align-items: center; justify-content: center;
+.sidebar .brand .t { font-weight: 700; font-size: 14px; }
+.sidebar .brand .v { font-size: 10px; color: var(--faint); background: var(--card-2); border: 1px solid var(--border); padding: 1px 6px; border-radius: 20px; }
+.nav { display: flex; flex-direction: column; gap: 2px; flex: 1; }
+.nav-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 10px; border: none; background: none; cursor: pointer;
+  border-radius: 8px; font-size: 13.5px; color: var(--muted);
+  text-align: left; font-weight: 500;
 }
-.icon-btn:hover { border-color: var(--border-strong); color: var(--text); }
+.nav-item:hover { background: var(--hover); color: var(--text); }
+.nav-item.active { background: var(--primary-soft); color: var(--primary); font-weight: 600; }
+.nav-item .nav-ico { font-size: 15px; }
+.nav-badge {
+  margin-left: auto; background: var(--border); color: var(--muted);
+  font-size: 10.5px; padding: 1px 7px; border-radius: 20px; font-family: var(--mono);
+}
+.nav-item.active .nav-badge { background: var(--primary); color: #fff; }
+.sidebar-foot { display: flex; align-items: center; justify-content: space-between; padding: 10px 8px 0; border-top: 1px solid var(--border); margin-top: 8px; }
+.sidebar-foot .nav-item { padding: 6px 8px; font-size: 12.5px; }
 
-/* ============ 卡片与控件 ============ */
+.main { flex: 1; min-width: 0; padding: 18px 22px 48px; }
+.view { display: none; }
+.view.active { display: block; animation: fadeIn .18s ease; }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; } }
+.view-head { display: flex; align-items: baseline; gap: 12px; margin-bottom: 14px; }
+.view-head h2 { margin: 0; font-size: 20px; }
+.view-head .view-sub { font-size: 12.5px; color: var(--faint); }
+
+/* ============ 卡片与通用控件 ============ */
 .card {
   background: var(--card); border: 1px solid var(--border);
   border-radius: var(--radius); box-shadow: var(--shadow);
@@ -94,8 +115,6 @@ body {
 .filter-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .filter-row + .filter-row { margin-top: 10px; padding-top: 12px; border-top: 1px dashed var(--border); }
 .f-label { font-size: 12px; color: var(--muted); font-weight: 600; white-space: nowrap; }
-
-/* 工具下拉 */
 .dropdown { position: relative; }
 .dropdown-btn {
   display: flex; align-items: center; gap: 8px;
@@ -112,39 +131,23 @@ body {
   min-width: 200px; padding: 8px; display: none;
 }
 .dropdown-panel.open { display: block; }
-.dd-item {
-  display: flex; align-items: center; gap: 8px; padding: 6px 8px;
-  border-radius: 6px; cursor: pointer; font-size: 13px;
-}
+.dd-item { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 6px; cursor: pointer; font-size: 13px; }
 .dd-item:hover { background: var(--hover); }
 .dd-item input { accent-color: var(--primary); }
 .dd-item .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
 .dd-item .count { margin-left: auto; color: var(--faint); font-size: 12px; font-family: var(--mono); }
 .dd-footer { display: flex; gap: 6px; padding: 6px 8px 2px; border-top: 1px solid var(--border); margin-top: 4px; }
-.dd-footer button {
-  flex: 1; font-size: 12px; padding: 4px 0; border-radius: 6px; cursor: pointer;
-  background: none; border: 1px solid var(--border-strong); color: var(--muted);
-}
+.dd-footer button { flex: 1; font-size: 12px; padding: 4px 0; border-radius: 6px; cursor: pointer; background: none; border: 1px solid var(--border-strong); color: var(--muted); }
 .dd-footer button:hover { color: var(--primary); border-color: var(--primary); }
-
-/* 时间分段 */
 .seg { display: flex; background: var(--card-2); border: 1px solid var(--border); border-radius: 8px; padding: 3px; gap: 2px; }
-.seg button {
-  border: none; background: none; padding: 5px 12px; border-radius: 6px;
-  font-size: 13px; color: var(--muted); cursor: pointer; white-space: nowrap;
-}
+.seg button { border: none; background: none; padding: 5px 12px; border-radius: 6px; font-size: 13px; color: var(--muted); cursor: pointer; white-space: nowrap; }
 .seg button:hover { color: var(--text); }
 .seg button.active { background: var(--card); color: var(--primary); font-weight: 600; box-shadow: 0 1px 3px rgba(0,0,0,.12); }
 .date-inputs { display: none; align-items: center; gap: 6px; }
 .date-inputs.show { display: flex; }
-.date-inputs input {
-  background: var(--card); border: 1px solid var(--border-strong); color: var(--text);
-  border-radius: 8px; padding: 5px 8px; font-size: 12px; font-family: var(--mono);
-}
+.date-inputs input { background: var(--card); border: 1px solid var(--border-strong); color: var(--text); border-radius: 8px; padding: 5px 8px; font-size: 12px; font-family: var(--mono); }
 .date-inputs .sep { color: var(--faint); font-size: 12px; }
-
-/* 搜索 */
-.search-wrap { position: relative; flex: 1; min-width: 220px; }
+.search-wrap { position: relative; flex: 1; min-width: 200px; }
 .search-wrap input {
   width: 100%; padding: 7px 12px 7px 34px;
   border: 1px solid var(--border-strong); border-radius: 8px;
@@ -153,8 +156,6 @@ body {
 }
 .search-wrap input:focus { border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-soft); }
 .search-wrap .s-icon { position: absolute; left: 11px; top: 50%; transform: translateY(-50%); color: var(--faint); font-size: 13px; pointer-events: none; }
-
-/* 按钮 */
 .btn {
   display: inline-flex; align-items: center; gap: 6px;
   padding: 7px 14px; border-radius: 8px; border: 1px solid var(--border-strong);
@@ -170,15 +171,17 @@ body {
 .btn.ghost { border-color: transparent; background: none; color: var(--muted); }
 .btn.ghost:hover { color: var(--primary); background: var(--hover); }
 .btn.sm { padding: 4px 10px; font-size: 12px; border-radius: 6px; }
+.btn.ok { background: var(--ok); border-color: var(--ok); color: #fff; }
+.btn.ok:hover { filter: brightness(1.08); color: #fff; }
 
 /* ============ 统计区 ============ */
 .stats-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 14px; }
-.stat-card { padding: 14px 16px; position: relative; overflow: hidden; cursor: default; }
+.stat-card { padding: 14px 16px; position: relative; overflow: hidden; }
+.stat-card.clickable { cursor: pointer; }
+.stat-card.clickable:hover { border-color: var(--primary); }
 .stat-card .stat-label { font-size: 12px; color: var(--muted); margin-bottom: 6px; display: flex; align-items: center; gap: 6px; }
 .stat-card .stat-value { font-size: 24px; font-weight: 700; font-family: var(--mono); letter-spacing: -.5px; }
 .stat-card .stat-sub { font-size: 11px; color: var(--faint); margin-top: 4px; }
-.stat-card.clickable { cursor: pointer; }
-.stat-card.clickable:hover { border-color: var(--primary); }
 .stat-card.accent .stat-value { color: var(--primary); }
 .stat-card.orange .stat-value { color: var(--warn); }
 .stat-card.red .stat-value { color: var(--danger); }
@@ -202,10 +205,6 @@ body {
 .action-bar .spacer { flex: 1; }
 .action-bar .status-text { font-size: 12px; color: var(--faint); font-family: var(--mono); white-space: nowrap; }
 .action-bar .status-text b { color: var(--muted); font-weight: 600; }
-.badge-count {
-  background: var(--danger); color: #fff; border-radius: 20px;
-  font-size: 11px; padding: 1px 7px; margin-left: 2px; min-width: 20px; text-align: center;
-}
 
 /* ============ 分组表格 ============ */
 .group { margin-bottom: 14px; overflow: hidden; }
@@ -228,25 +227,20 @@ body {
 .group-header input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--primary); cursor: pointer; }
 .group-content { display: block; }
 .group-content.collapsed { display: none; }
-
 table { width: 100%; border-collapse: collapse; }
 thead th {
   position: sticky; top: 0; z-index: 5;
   background: var(--card); color: var(--muted);
-  font-weight: 600; font-size: 11.5px; text-transform: none; letter-spacing: .3px;
+  font-weight: 600; font-size: 11.5px; letter-spacing: .3px;
   padding: 9px 12px; text-align: left; border-bottom: 1px solid var(--border);
   white-space: nowrap;
 }
 thead th.sortable { cursor: pointer; }
 thead th.sortable:hover { color: var(--primary); }
 thead th .arrow { font-size: 9px; margin-left: 3px; color: var(--primary); }
-tbody td {
-  padding: 8px 12px; border-bottom: 1px solid var(--border);
-  font-size: 13px; vertical-align: middle;
-}
+tbody td { padding: 8px 12px; border-bottom: 1px solid var(--border); font-size: 13px; vertical-align: middle; }
 tbody tr:hover { background: var(--hover); }
 tbody tr.selected { background: var(--selected); }
-tbody tr.selected:hover { background: var(--selected); }
 td.check { width: 36px; text-align: center; }
 td.check input { width: 16px; height: 16px; accent-color: var(--primary); cursor: pointer; }
 .main-cell .s-title { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 520px; }
@@ -262,17 +256,13 @@ td.check input { width: 16px; height: 16px; accent-color: var(--primary); cursor
 .msg-cell .a { color: var(--ok); }
 .msg-cell .ev { color: var(--faint); }
 .badge { font-size: 10.5px; padding: 1px 7px; border-radius: 10px; border: 1px solid var(--border-strong); color: var(--muted); margin-left: 6px; vertical-align: 1px; }
-.badge.kimi { color: #6366f1; border-color: #6366f1; background: transparent; }
 .op-cell { white-space: nowrap; text-align: right; }
-.op-cell button {
-  border: none; background: none; cursor: pointer; font-size: 12px;
-  color: var(--muted); padding: 3px 6px; border-radius: 6px; margin-left: 2px;
-}
+.op-cell button { border: none; background: none; cursor: pointer; font-size: 12px; color: var(--muted); padding: 3px 6px; border-radius: 6px; margin-left: 2px; }
 .op-cell button:hover { background: var(--primary-soft); color: var(--primary); }
 .op-cell .op-preview { color: var(--primary); font-weight: 600; visibility: hidden; }
 tbody tr:hover .op-cell .op-preview, tr.selected .op-cell .op-preview { visibility: visible; }
 
-/* ============ 骨架屏 & 空态 ============ */
+/* ============ 通用状态 ============ */
 .skeleton { padding: 14px 16px; }
 .sk-row { display: flex; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--border); }
 .sk-row:last-child { border-bottom: none; }
@@ -282,10 +272,95 @@ tbody tr:hover .op-cell .op-preview, tr.selected .op-cell .op-preview { visibili
   background-size: 200% 100%; animation: shimmer 1.2s infinite;
 }
 @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
-.empty-state { padding: 56px 20px; text-align: center; }
-.empty-state .e-ico { font-size: 40px; margin-bottom: 12px; opacity: .6; }
+.empty-state { padding: 48px 20px; text-align: center; }
+.empty-state .e-ico { font-size: 38px; margin-bottom: 10px; opacity: .6; }
 .empty-state .e-title { font-size: 15px; font-weight: 600; color: var(--muted); margin-bottom: 6px; }
 .empty-state .e-hint { font-size: 13px; color: var(--faint); line-height: 1.8; }
+
+/* ============ Harness 视图 ============ */
+.harness-layout { display: grid; grid-template-columns: 300px 1fr; gap: 14px; align-items: start; }
+.harness-files { padding: 10px; max-height: calc(100vh - 160px); overflow: auto; }
+.h-file-cat { font-size: 11px; color: var(--faint); font-weight: 600; padding: 10px 8px 4px; }
+.h-file {
+  display: flex; align-items: center; gap: 8px; padding: 7px 8px;
+  border-radius: 7px; cursor: pointer; font-size: 13px;
+}
+.h-file:hover { background: var(--hover); }
+.h-file.active { background: var(--primary-soft); color: var(--primary); font-weight: 600; }
+.h-file .h-ico { font-size: 14px; }
+.h-file .h-name { font-family: var(--mono); font-size: 12px; word-break: break-all; }
+.h-file .h-size { margin-left: auto; color: var(--faint); font-size: 11px; font-family: var(--mono); }
+.h-file .bak { color: var(--faint); font-size: 11px; }
+.harness-editor { min-height: 300px; }
+.h-editor-head { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+.h-editor-head .h-title { font-weight: 600; font-family: var(--mono); font-size: 13px; }
+.h-editor-head .h-meta { font-size: 11.5px; color: var(--faint); font-family: var(--mono); }
+.h-editor-head .spacer { flex: 1; }
+.h-editor-body { padding: 14px 16px; }
+.h-tabs { display: flex; gap: 2px; margin-bottom: 10px; }
+.h-tab { padding: 6px 12px; border: none; background: none; cursor: pointer; font-size: 12.5px; color: var(--muted); border-radius: 6px; }
+.h-tab.active { background: var(--primary-soft); color: var(--primary); font-weight: 600; }
+.h-edit-area {
+  width: 100%; min-height: 320px; padding: 12px;
+  border: 1px solid var(--border-strong); border-radius: 10px;
+  background: var(--card-2); color: var(--text);
+  font-family: var(--mono); font-size: 12.5px; line-height: 1.6;
+  resize: vertical; outline: none; tab-size: 2;
+}
+.h-edit-area:focus { border-color: var(--primary); }
+.h-json-tree pre { margin: 0; }
+.h-secret-note { background: var(--danger-soft); border: 1px solid var(--danger); border-radius: 8px; padding: 9px 12px; font-size: 12px; color: var(--danger); margin-bottom: 10px; }
+.h-backup-list { display: flex; gap: 8px; flex-wrap: wrap; }
+.h-backup-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  border: 1px solid var(--border); background: var(--card-2);
+  border-radius: 8px; padding: 4px 10px; font-size: 11.5px; font-family: var(--mono); color: var(--muted);
+}
+.h-backup-chip button { border: none; background: none; cursor: pointer; color: var(--danger); font-size: 12px; padding: 0 2px; }
+.h-backup-chip button.restore { color: var(--primary); }
+
+/* ============ Skills 视图 ============ */
+.skill-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; }
+.skill-card { padding: 14px 16px; cursor: pointer; display: flex; flex-direction: column; gap: 6px; transition: border-color .15s; }
+.skill-card:hover { border-color: var(--primary); }
+.skill-card .sk-name { font-weight: 600; font-size: 14px; display: flex; align-items: center; gap: 8px; }
+.skill-card .sk-desc { font-size: 12.5px; color: var(--muted); overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.skill-card .sk-meta { display: flex; align-items: center; gap: 8px; margin-top: auto; padding-top: 8px; border-top: 1px dashed var(--border); font-size: 11px; color: var(--faint); font-family: var(--mono); }
+.scope-badge { font-size: 10.5px; padding: 1px 8px; border-radius: 10px; font-weight: 600; }
+.scope-badge.user { background: var(--primary-soft); color: var(--primary); }
+.scope-badge.global { background: #e9fbf3; color: var(--ok); }
+[data-theme="dark"] .scope-badge.global { background: #123528; }
+.scope-badge.project { background: #fdf3e2; color: #b26a00; }
+[data-theme="dark"] .scope-badge.project { background: #3a2c10; }
+.fm-warn { color: var(--danger); font-size: 11px; }
+.skill-detail { padding: 16px; }
+.skill-detail pre { background: var(--card-2); border: 1px solid var(--border); border-radius: 10px; padding: 14px; overflow: auto; font-size: 12.5px; line-height: 1.6; max-height: 55vh; }
+.skill-form label { display: block; font-size: 12.5px; color: var(--muted); margin: 10px 0 4px; }
+.skill-form input, .skill-form select, .skill-form textarea {
+  width: 100%; padding: 8px 10px; border: 1px solid var(--border-strong); border-radius: 8px;
+  background: var(--card); color: var(--text); font-size: 13px; outline: none;
+}
+.skill-form input:focus, .skill-form textarea:focus { border-color: var(--primary); }
+.skill-form textarea { font-family: var(--mono); font-size: 12.5px; min-height: 200px; resize: vertical; }
+
+/* ============ MCP 视图 ============ */
+.mcp-server { margin-bottom: 12px; }
+.mcp-server-head { display: flex; align-items: center; gap: 10px; padding: 13px 16px; cursor: pointer; }
+.mcp-server-head:hover { background: var(--hover); }
+.mcp-server-head .m-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--ok); flex-shrink: 0; }
+.mcp-server-head .m-name { font-weight: 600; font-size: 14px; font-family: var(--mono); }
+.mcp-server-head .m-meta { font-size: 11.5px; color: var(--faint); font-family: var(--mono); }
+.mcp-server-head .m-arrow { margin-left: auto; color: var(--faint); transition: transform .2s; font-size: 11px; }
+.mcp-server.collapsed .m-arrow { transform: rotate(-90deg); }
+.mcp-tools { border-top: 1px solid var(--border); padding: 4px 0; }
+.chip { display: inline-flex; align-items: center; gap: 5px; background: var(--card-2); border: 1px solid var(--border); border-radius: 14px; padding: 2px 9px; font-size: 11px; font-family: var(--mono); color: var(--muted); margin: 2px; }
+.tool-row { display: flex; align-items: baseline; gap: 8px; padding: 8px 16px; border-bottom: 1px solid var(--border); }
+.tool-row:hover { background: var(--hover); }
+.tool-row .t-name { font-family: var(--mono); font-weight: 600; font-size: 12.5px; color: var(--primary); cursor: pointer; white-space: nowrap; }
+.tool-row .t-desc { font-size: 12.5px; color: var(--muted); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tool-row .t-params { font-size: 11px; color: var(--faint); font-family: var(--mono); white-space: nowrap; }
+.tool-row .t-copy { border: none; background: none; cursor: pointer; color: var(--faint); font-size: 12px; padding: 2px 4px; border-radius: 4px; }
+.tool-row .t-copy:hover { color: var(--primary); background: var(--primary-soft); }
 
 /* ============ 弹窗 ============ */
 .modal-overlay {
@@ -294,7 +369,6 @@ tbody tr:hover .op-cell .op-preview, tr.selected .op-cell .op-preview { visibili
   backdrop-filter: blur(3px);
 }
 .modal-overlay.active { display: flex; animation: fadeIn .15s ease; }
-@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 .modal {
   background: var(--card); border-radius: 14px; border: 1px solid var(--border);
   width: 92%; max-width: 980px; max-height: 88vh;
@@ -302,92 +376,44 @@ tbody tr:hover .op-cell .op-preview, tr.selected .op-cell .op-preview { visibili
   animation: pop .18s ease;
 }
 @keyframes pop { from { transform: scale(.96) translateY(8px); opacity: 0; } to { transform: none; opacity: 1; } }
-.modal.small { max-width: 540px; }
-.modal-header {
-  padding: 14px 18px; border-bottom: 1px solid var(--border);
-  display: flex; justify-content: space-between; align-items: center; gap: 12px;
-}
+.modal.small { max-width: 560px; }
+.modal-header { padding: 14px 18px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; gap: 12px; }
 .modal-header h3 { margin: 0; font-size: 15px; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .modal-header .close { background: none; border: none; font-size: 20px; cursor: pointer; color: var(--faint); padding: 2px 6px; border-radius: 6px; }
 .modal-header .close:hover { background: var(--hover); color: var(--text); }
-.modal-info {
-  display: flex; gap: 14px; padding: 9px 18px; border-bottom: 1px solid var(--border);
-  background: var(--card-2); font-size: 12px; color: var(--muted); flex-wrap: wrap;
-}
+.modal-info { display: flex; gap: 14px; padding: 9px 18px; border-bottom: 1px solid var(--border); background: var(--card-2); font-size: 12px; color: var(--muted); flex-wrap: wrap; }
 .modal-tabs { display: flex; gap: 2px; padding: 8px 18px 0; border-bottom: 1px solid var(--border); }
-.modal-tab {
-  padding: 7px 14px; border: none; background: none; cursor: pointer;
-  font-size: 13px; color: var(--muted); border-bottom: 2px solid transparent;
-}
+.modal-tab { padding: 7px 14px; border: none; background: none; cursor: pointer; font-size: 13px; color: var(--muted); border-bottom: 2px solid transparent; }
 .modal-tab.active { color: var(--primary); border-bottom-color: var(--primary); font-weight: 600; }
 .modal-search { padding: 10px 18px; border-bottom: 1px solid var(--border); }
-.modal-search input {
-  width: 100%; padding: 7px 12px; border: 1px solid var(--border-strong);
-  border-radius: 8px; background: var(--card); color: var(--text); font-size: 13px; outline: none;
-}
+.modal-search input { width: 100%; padding: 7px 12px; border: 1px solid var(--border-strong); border-radius: 8px; background: var(--card); color: var(--text); font-size: 13px; outline: none; }
 .modal-search input:focus { border-color: var(--primary); }
 .modal-body { padding: 14px 18px; overflow: auto; flex: 1; background: var(--card-2); }
-.modal-body pre {
-  background: var(--card); padding: 14px; border-radius: 10px; border: 1px solid var(--border);
-  overflow: auto; font-size: 12px; line-height: 1.55; font-family: var(--mono);
-}
-.modal-footer {
-  padding: 12px 18px; border-top: 1px solid var(--border);
-  display: flex; justify-content: flex-end; gap: 10px; align-items: center; flex-wrap: wrap;
-}
+.modal-body pre { background: var(--card); padding: 14px; border-radius: 10px; border: 1px solid var(--border); overflow: auto; font-size: 12px; line-height: 1.55; font-family: var(--mono); }
+.modal-footer { padding: 12px 18px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 10px; align-items: center; flex-wrap: wrap; }
+.confirm-items { max-height: 180px; overflow: auto; border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px; margin: 10px 0; font-family: var(--mono); font-size: 11.5px; color: var(--muted); }
+.confirm-note { background: var(--danger-soft); border: 1px solid var(--danger); border-radius: 8px; padding: 9px 12px; font-size: 12.5px; color: var(--danger); margin: 10px 0; }
+.label-check { display: flex; gap: 8px; align-items: center; font-size: 13px; color: var(--muted); cursor: pointer; }
+.label-check input { accent-color: var(--danger); }
 
-/* 聊天预览 */
+/* 聊天预览 / toast（会话模块） */
 .chat-message { display: flex; flex-direction: column; margin-bottom: 12px; max-width: 90%; }
 .chat-message.user { align-items: flex-end; margin-left: auto; }
 .chat-message.assistant { align-items: flex-start; }
-.chat-bubble {
-  padding: 9px 13px; border-radius: 12px; font-size: 13px; line-height: 1.6;
-  white-space: pre-wrap; word-break: break-word; box-shadow: 0 1px 2px rgba(0,0,0,.06);
-}
+.chat-bubble { padding: 9px 13px; border-radius: 12px; font-size: 13px; line-height: 1.6; white-space: pre-wrap; word-break: break-word; box-shadow: 0 1px 2px rgba(0,0,0,.06); }
 .chat-message.user .chat-bubble { background: var(--primary); color: #fff; border-bottom-right-radius: 4px; }
 .chat-message.assistant .chat-bubble { background: var(--card); color: var(--text); border: 1px solid var(--border); border-bottom-left-radius: 4px; }
 .chat-message .meta { font-size: 11px; color: var(--faint); margin: 4px 2px 0; }
 .chat-message.collapsed .chat-bubble { max-height: 110px; overflow: hidden; position: relative; }
-.chat-message.collapsed .chat-bubble::after {
-  content: ""; position: absolute; bottom: 0; left: 0; right: 0; height: 36px;
-  background: linear-gradient(transparent, var(--card-2));
-}
+.chat-message.collapsed .chat-bubble::after { content: ""; position: absolute; bottom: 0; left: 0; right: 0; height: 36px; background: linear-gradient(transparent, var(--card-2)); }
 .chat-message.user.collapsed .chat-bubble::after { background: linear-gradient(transparent, var(--primary)); }
 .expand-btn { font-size: 12px; color: var(--primary); cursor: pointer; margin-top: 4px; }
 .day-divider { text-align: center; margin: 14px 0; font-size: 11.5px; color: var(--faint); position: relative; }
 .day-divider::before { content: ""; position: absolute; top: 50%; left: 0; right: 0; height: 1px; background: var(--border); }
 .day-divider span { background: var(--card-2); padding: 0 10px; position: relative; }
 .raw-event { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 12px; margin-bottom: 10px; }
-.raw-event .event-type {
-  font-size: 10.5px; color: var(--primary); background: var(--primary-soft);
-  padding: 2px 8px; border-radius: 10px; margin-bottom: 8px; display: inline-block; font-family: var(--mono);
-}
+.raw-event .event-type { font-size: 10.5px; color: var(--primary); background: var(--primary-soft); padding: 2px 8px; border-radius: 10px; margin-bottom: 8px; display: inline-block; font-family: var(--mono); }
 .raw-event pre { background: none; border: none; padding: 0; margin: 0; font-size: 11.5px; }
-
-/* 确认弹窗 */
-.confirm-items {
-  max-height: 200px; overflow: auto; border: 1px solid var(--border);
-  border-radius: 8px; padding: 6px 10px; margin: 10px 0;
-  font-family: var(--mono); font-size: 11.5px; color: var(--muted);
-}
-.confirm-note {
-  background: var(--danger-soft); border: 1px solid var(--danger);
-  border-radius: 8px; padding: 9px 12px; font-size: 12.5px; color: var(--danger); margin: 10px 0;
-}
-.label-check { display: flex; gap: 8px; align-items: center; font-size: 13px; color: var(--muted); cursor: pointer; }
-.label-check input { accent-color: var(--danger); }
-
-/* 回收站表格 */
-.trash-table td { font-size: 12.5px; }
-.trash-table .op button {
-  padding: 4px 10px; border-radius: 6px; border: 1px solid var(--border-strong);
-  background: var(--card); cursor: pointer; font-size: 12px; margin-right: 6px; color: var(--muted);
-}
-.trash-table .op .restore { color: var(--primary); border-color: var(--primary); }
-.trash-table .op .restore:hover { background: var(--primary-soft); }
-.trash-table .op .del:hover { color: var(--danger); border-color: var(--danger); background: var(--danger-soft); }
-
-/* ============ Toast ============ */
 .toast {
   position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(20px);
   padding: 10px 20px; border-radius: 10px; color: #fff; font-size: 13px; z-index: 200;
@@ -400,120 +426,235 @@ tbody tr:hover .op-cell .op-preview, tr.selected .op-cell .op-preview { visibili
 
 @media (max-width: 900px) {
   .stats-row { grid-template-columns: repeat(2, 1fr); }
-  .dist-row { grid-template-columns: 100px 1fr 50px; }
+  .harness-layout { grid-template-columns: 1fr; }
+  .sidebar { width: 60px; }
+  .sidebar .brand .t, .sidebar .brand .v, .nav-item .nav-txt, .nav-badge, .sidebar-foot .nav-txt { display: none; }
+  .nav-item { justify-content: center; }
 }
 </style>
 </head>
 <body>
-<div class="container">
-
-  <!-- 顶栏 -->
-  <div class="topbar">
+<div class="layout">
+  <!-- ============ 侧边菜单 ============ -->
+  <aside class="sidebar">
     <div class="brand">
       <div class="logo">🧹</div>
-      <h1>Agent 管理器</h1>
-      <span class="version" id="appVersion">v1.1.0</span>
+      <span class="t">Agent 管理器</span>
+      <span class="v" id="appVersion">v2.0.0</span>
     </div>
-    <div class="right">
-      <button class="icon-btn" id="themeToggle" title="切换深浅色主题" onclick="toggleTheme()">🌙</button>
+    <nav class="nav">
+      <button class="nav-item active" data-view="sessions" onclick="showView('sessions')">
+        <span class="nav-ico">💬</span><span class="nav-txt">会话管理</span>
+      </button>
+      <button class="nav-item" data-view="harness" onclick="showView('harness')">
+        <span class="nav-ico">⚙️</span><span class="nav-txt">Harness 配置</span>
+        <span class="nav-badge" id="navHarnessBadge"></span>
+      </button>
+      <button class="nav-item" data-view="skills" onclick="showView('skills')">
+        <span class="nav-ico">📚</span><span class="nav-txt">Skill 管理</span>
+        <span class="nav-badge" id="navSkillsBadge"></span>
+      </button>
+      <button class="nav-item" data-view="mcp" onclick="showView('mcp')">
+        <span class="nav-ico">🔌</span><span class="nav-txt">MCP 管理</span>
+        <span class="nav-badge" id="navMcpBadge"></span>
+      </button>
+    </nav>
+    <div class="sidebar-foot">
+      <button class="nav-item" onclick="toggleTheme()">
+        <span class="nav-ico" id="themeIco">🌙</span><span class="nav-txt" id="themeTxt">深色模式</span>
+      </button>
     </div>
-  </div>
+  </aside>
 
-  <!-- 筛选区 -->
-  <div class="card filters">
-    <div class="filter-row">
-      <span class="f-label">扫描工具</span>
-      <div class="dropdown" id="toolDropdown">
-        <button class="dropdown-btn" onclick="toggleToolPanel(event)">
-          <span id="toolBtnLabel">6 个工具</span><span class="caret">▼</span>
-        </button>
-        <div class="dropdown-panel" id="toolPanel">
-          <div id="toolList"></div>
-          <div class="dd-footer">
-            <button onclick="setAllTools(true)">全选</button>
-            <button onclick="setAllTools(false)">清空</button>
-            <button onclick="selectDefaultTools()">默认</button>
+  <!-- ============ 主内容 ============ -->
+  <main class="main">
+
+    <!-- ===== 视图: 会话管理 ===== -->
+    <div class="view active" id="view-sessions">
+      <div class="view-head">
+        <h2>💬 会话管理</h2>
+        <span class="view-sub">扫描与管理各 AI 客户端的会话文件</span>
+      </div>
+
+      <div class="card filters">
+        <div class="filter-row">
+          <span class="f-label">扫描工具</span>
+          <div class="dropdown" id="toolDropdown">
+            <button class="dropdown-btn" onclick="toggleToolPanel(event)">
+              <span id="toolBtnLabel">6 个工具</span><span class="caret">▼</span>
+            </button>
+            <div class="dropdown-panel" id="toolPanel">
+              <div id="toolList"></div>
+              <div class="dd-footer">
+                <button onclick="setAllTools(true)">全选</button>
+                <button onclick="setAllTools(false)">清空</button>
+                <button onclick="selectDefaultTools()">默认</button>
+              </div>
+            </div>
+          </div>
+          <span class="f-label">时间范围</span>
+          <div class="seg" id="timeSeg">
+            <button data-range="all">全部</button>
+            <button data-range="7">近 7 天</button>
+            <button data-range="30" class="active">近 30 天</button>
+            <button data-range="90">近 90 天</button>
+            <button data-range="180">近 180 天</button>
+            <button data-range="custom">自定义</button>
+          </div>
+          <div class="date-inputs" id="dateInputs">
+            <input type="date" id="dateFrom"><span class="sep">—</span><input type="date" id="dateTo">
+          </div>
+          <button class="btn primary" id="scanBtn" onclick="loadSessions()">🔍 扫描</button>
+        </div>
+        <div class="filter-row">
+          <div class="search-wrap">
+            <span class="s-icon">🔎</span>
+            <input type="text" id="searchInput" placeholder="搜索标题、路径、创建目录…（支持高亮）" oninput="applySearch()">
           </div>
         </div>
       </div>
-      <span class="f-label">时间范围</span>
-      <div class="seg" id="timeSeg">
-        <button data-range="all">全部</button>
-        <button data-range="7">近 7 天</button>
-        <button data-range="30" class="active">近 30 天</button>
-        <button data-range="90">近 90 天</button>
-        <button data-range="180">近 180 天</button>
-        <button data-range="custom">自定义</button>
+
+      <div class="stats-row">
+        <div class="card stat-card accent">
+          <div class="stat-label">会话总数</div>
+          <div class="stat-value" id="statTotal">0</div>
+          <div class="stat-sub" id="statTotalSub">当前筛选条件下</div>
+          <span class="stat-ico">📚</span>
+        </div>
+        <div class="card stat-card">
+          <div class="stat-label">磁盘占用</div>
+          <div class="stat-value" id="statSizeAll">0 B</div>
+          <div class="stat-sub">扫描结果合计</div>
+          <span class="stat-ico">💾</span>
+        </div>
+        <div class="card stat-card orange clickable" onclick="focusSelected()">
+          <div class="stat-label">已选中</div>
+          <div class="stat-value" id="statSelected">0</div>
+          <div class="stat-sub" id="statSelectedSub">勾选删除目标</div>
+          <span class="stat-ico">✅</span>
+        </div>
+        <div class="card stat-card red clickable" onclick="openTrash()">
+          <div class="stat-label">回收站</div>
+          <div class="stat-value" id="statTrash">0</div>
+          <div class="stat-sub" id="statTrashSub">可恢复 · 点击管理</div>
+          <span class="stat-ico">🗑️</span>
+        </div>
       </div>
-      <div class="date-inputs" id="dateInputs">
-        <input type="date" id="dateFrom">
-        <span class="sep">—</span>
-        <input type="date" id="dateTo">
+
+      <div class="card dist-card">
+        <h3>工具分布（会话数 · 磁盘占用）</h3>
+        <div class="dist-bars" id="distBars"></div>
+        <div class="clip" id="distLegend"></div>
       </div>
-      <button class="btn primary" id="scanBtn" onclick="loadSessions()">🔍 扫描</button>
+
+      <div class="card action-bar">
+        <button class="btn sm" onclick="selectAll(true)">全选</button>
+        <button class="btn sm" onclick="invertSelect()">反选</button>
+        <button class="btn sm" onclick="selectAll(false)">取消</button>
+        <span style="width:1px;height:18px;background:var(--border)"></span>
+        <button class="btn sm" onclick="exportCsv()" title="导出当前筛选+搜索结果" disabled id="exportBtn">📄 导出 CSV</button>
+        <span style="width:1px;height:18px;background:var(--border)"></span>
+        <button class="btn sm" onclick="cleanupStaleIndex()" title="清理 Kimi/Codex/Orca 会话索引中已失效的条目">🧹 清理失效索引</button>
+        <span class="spacer"></span>
+        <button class="btn danger sm" onclick="askDelete()" title="删除选中会话（默认进回收站）" disabled id="deleteBtn">🗑️ 删除选中 (<span id="delCount">0</span>)</button>
+        <span class="status-text" id="statusText">就绪</span>
+      </div>
+
+      <div id="content"></div>
     </div>
-    <div class="filter-row">
-      <div class="search-wrap">
-        <span class="s-icon">🔎</span>
-        <input type="text" id="searchInput" placeholder="搜索标题、路径、创建目录…（支持高亮）" oninput="applySearch()">
+
+    <!-- ===== 视图: Harness 配置 ===== -->
+    <div class="view" id="view-harness">
+      <div class="view-head">
+        <h2>⚙️ Harness 配置管理</h2>
+        <span class="view-sub" id="harnessRoot"></span>
+      </div>
+      <div id="harnessHealth"></div>
+      <div class="harness-layout">
+        <div class="card harness-files" id="harnessFiles"></div>
+        <div class="card harness-editor" id="harnessEditor">
+          <div class="empty-state">
+            <div class="e-ico">📄</div>
+            <div class="e-title">选择一个配置文件</div>
+            <div class="e-hint">左侧列出 ~/.pi 下的配置文件；编辑保存前自动备份，敏感字段默认脱敏显示。</div>
+          </div>
+        </div>
       </div>
     </div>
-  </div>
 
-  <!-- 统计区 -->
-  <div class="stats-row">
-    <div class="card stat-card accent">
-      <div class="stat-label">会话总数</div>
-      <div class="stat-value" id="statTotal">0</div>
-      <div class="stat-sub" id="statTotalSub">当前筛选条件下</div>
-      <span class="stat-ico">📚</span>
+    <!-- ===== 视图: Skill 管理 ===== -->
+    <div class="view" id="view-skills">
+      <div class="view-head">
+        <h2>📚 Skill 管理</h2>
+        <span class="view-sub">管理 pi 的 Skills（~/.pi/agent/skills、~/.agents/skills、项目记忆）</span>
+      </div>
+      <div class="card filters">
+        <div class="filter-row">
+          <div class="search-wrap" style="flex:2">
+            <span class="s-icon">🔎</span>
+            <input type="text" id="skillSearch" placeholder="搜索 Skill 名称或描述…" oninput="renderSkills()">
+          </div>
+          <select id="skillScopeFilter" class="dropdown-btn" onchange="renderSkills()" style="padding:6px 12px">
+            <option value="">全部范围</option>
+            <option value="user">user（用户级）</option>
+            <option value="global">global（全局）</option>
+            <option value="project">project（项目级）</option>
+            <option value="memory">memory（记忆）</option>
+          </select>
+          <button class="btn primary" onclick="openSkillCreate()">+ 新建 Skill</button>
+          <button class="btn" onclick="loadSkills()">🔄 刷新</button>
+        </div>
+      </div>
+      <div id="skillsContent"></div>
     </div>
-    <div class="card stat-card">
-      <div class="stat-label">磁盘占用</div>
-      <div class="stat-value" id="statSizeAll">0 B</div>
-      <div class="stat-sub">扫描结果合计</div>
-      <span class="stat-ico">💾</span>
-    </div>
-    <div class="card stat-card orange clickable" onclick="focusSelected()">
-      <div class="stat-label">已选中</div>
-      <div class="stat-value" id="statSelected">0</div>
-      <div class="stat-sub" id="statSelectedSub">勾选删除目标</div>
-      <span class="stat-ico">✅</span>
-    </div>
-    <div class="card stat-card red clickable" onclick="openTrash()">
-      <div class="stat-label">回收站</div>
-      <div class="stat-value" id="statTrash">0</div>
-      <div class="stat-sub" id="statTrashSub">可恢复 · 点击管理</div>
-      <span class="stat-ico">🗑️</span>
-    </div>
-  </div>
 
-  <!-- 工具分布 -->
-  <div class="card dist-card">
-    <h3>工具分布（会话数 · 磁盘占用）</h3>
-    <div class="dist-bars" id="distBars"></div>
-    <div class="clip" id="distLegend"></div>
-  </div>
-
-  <!-- 操作栏 -->
-  <div class="card action-bar">
-    <button class="btn sm" onclick="selectAll(true)">全选</button>
-    <button class="btn sm" onclick="invertSelect()">反选</button>
-    <button class="btn sm" onclick="selectAll(false)">取消</button>
-    <span style="width:1px;height:18px;background:var(--border)"></span>
-    <button class="btn sm" onclick="exportCsv()" title="导出当前筛选+搜索结果" disabled id="exportBtn">📄 导出 CSV</button>
-    <span style="width:1px;height:18px;background:var(--border)"></span>
-    <button class="btn sm" onclick="cleanupStaleIndex()" title="清理 Kimi/Codex/Orca 会话索引中已失效的条目">🧹 清理失效索引</button>
-    <span class="spacer"></span>
-    <button class="btn danger sm" onclick="askDelete()" title="删除选中会话（默认进回收站）" disabled id="deleteBtn">🗑️ 删除选中 (<span id="delCount">0</span>)</button>
-    <span class="status-text" id="statusText">就绪</span>
-  </div>
-
-  <!-- 内容 -->
-  <div id="content"></div>
+    <!-- ===== 视图: MCP 管理 ===== -->
+    <div class="view" id="view-mcp">
+      <div class="view-head">
+        <h2>🔌 MCP 管理</h2>
+        <span class="view-sub">查看 MCP 服务器与工具清单（来自 pi 的 mcp-cache）</span>
+      </div>
+      <div class="stats-row">
+        <div class="card stat-card accent">
+          <div class="stat-label">MCP 服务器</div>
+          <div class="stat-value" id="mcpServerCount">0</div>
+          <div class="stat-sub">已注册</div>
+          <span class="stat-ico">🖥️</span>
+        </div>
+        <div class="card stat-card">
+          <div class="stat-label">工具总数</div>
+          <div class="stat-value" id="mcpToolCount">0</div>
+          <div class="stat-sub">可调用工具</div>
+          <span class="stat-ico">🧰</span>
+        </div>
+        <div class="card stat-card">
+          <div class="stat-label">缓存文件</div>
+          <div class="stat-value" id="mcpCacheSize">0 B</div>
+          <div class="stat-sub" id="mcpCacheMeta"></div>
+          <span class="stat-ico">🗄️</span>
+        </div>
+        <div class="card stat-card orange clickable" onclick="openMcpRaw()">
+          <div class="stat-label">原始配置</div>
+          <div class="stat-value">JSON</div>
+          <div class="stat-sub">查看完整内容</div>
+          <span class="stat-ico">📜</span>
+        </div>
+      </div>
+      <div class="card filters">
+        <div class="filter-row">
+          <div class="search-wrap">
+            <span class="s-icon">🔎</span>
+            <input type="text" id="mcpSearch" placeholder="搜索工具名、描述、服务器…" oninput="renderMcp()">
+          </div>
+          <button class="btn" onclick="loadMcp()">🔄 刷新</button>
+        </div>
+      </div>
+      <div id="mcpContent"></div>
+    </div>
+  </main>
 </div>
 
-<!-- 预览弹窗 -->
+<!-- 预览弹窗（会话） -->
 <div class="modal-overlay" id="previewModal" onclick="if(event.target===this) closeModal()">
   <div class="modal">
     <div class="modal-header">
@@ -533,11 +674,11 @@ tbody tr:hover .op-cell .op-preview, tr.selected .op-cell .op-preview { visibili
 <!-- 删除确认弹窗 -->
 <div class="modal-overlay" id="confirmModal" onclick="if(event.target===this) closeConfirm()">
   <div class="modal small">
-    <div class="modal-header"><h3>确认删除</h3><button class="close" onclick="closeConfirm()">&times;</button></div>
+    <div class="modal-header"><h3 id="confirmTitle">确认</h3><button class="close" onclick="closeConfirm()">&times;</button></div>
     <div class="modal-body" id="confirmBody"></div>
     <div class="modal-footer">
       <button class="btn" onclick="closeConfirm()">取消</button>
-      <button class="btn danger" onclick="doDelete()">🗑️ 确认删除</button>
+      <button class="btn danger" id="confirmOkBtn" onclick="confirmOk()">确认</button>
     </div>
   </div>
 </div>
@@ -554,6 +695,18 @@ tbody tr:hover .op-cell .op-preview, tr.selected .op-cell .op-preview { visibili
       <button class="btn" onclick="closeTrash()">关闭</button>
       <button class="btn danger" onclick="emptyTrash()" title="彻底删除回收站内所有条目，不可恢复">清空回收站</button>
     </div>
+  </div>
+</div>
+
+<!-- 通用大弹窗（Skill 详情/新建、MCP 原始等） -->
+<div class="modal-overlay" id="genericModal" onclick="if(event.target===this) closeGeneric()">
+  <div class="modal" id="genericModalBox">
+    <div class="modal-header">
+      <h3 id="genericTitle">详情</h3>
+      <button class="close" onclick="closeGeneric()">&times;</button>
+    </div>
+    <div class="modal-body" id="genericBody"></div>
+    <div class="modal-footer" id="genericFooter"></div>
   </div>
 </div>
 
@@ -581,12 +734,16 @@ const tName = id => (TOOLS.find(t => t.id === id) || {}).name || id;
 
 let allSessions = [];
 let selectedTools = new Set(TOOLS.filter(t => t.def).map(t => t.id));
-let timeRange = '30';           // all | 7 | 30 | 90 | 180 | custom
+let timeRange = '30';
 let sortField = 'mtime', sortDesc = true;
 let currentPreviewData = null, currentPreviewTab = 'conversation';
-let lastScanElapsed = 0;
 
-/* localStorage 持久化 */
+/* 各视图数据缓存 */
+let harnessFilesCache = null, harnessSelectedFile = null, harnessEditMode = false;
+let skillsCache = null;
+let mcpCache = null;
+
+/* localStorage */
 function lsGet(k, d) { try { const v = localStorage.getItem('asm.' + k); return v === null ? d : v; } catch (e) { return d; } }
 function lsSet(k, v) { try { localStorage.setItem('asm.' + k, v); } catch (e) {} }
 (() => {
@@ -636,16 +793,42 @@ function highlight(s, q) {
   }
   return out + escapeHtml(s.slice(i));
 }
+function copyText(text, msg = '已复制') {
+  const done = () => showToast(msg);
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(done).catch(() => { fallbackCopy(text); done(); });
+  } else { fallbackCopy(text); done(); }
+}
+function fallbackCopy(text) {
+  const ta = document.createElement('textarea');
+  ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+  document.body.appendChild(ta); ta.select();
+  try { document.execCommand('copy'); } catch (e) {}
+  ta.remove();
+}
 
 /* ================= 主题 ================= */
 function applyTheme(dark) {
   document.documentElement.setAttribute('data-theme', dark ? 'dark' : '');
-  document.getElementById('themeToggle').textContent = dark ? '☀️' : '🌙';
+  document.getElementById('themeIco').textContent = dark ? '☀️' : '🌙';
+  document.getElementById('themeTxt').textContent = dark ? '浅色模式' : '深色模式';
   lsSet('theme', dark ? 'dark' : 'light');
 }
 function toggleTheme() { applyTheme(document.documentElement.getAttribute('data-theme') !== 'dark'); }
 
-/* ================= 工具下拉 ================= */
+/* ================= 视图路由 ================= */
+function showView(name) {
+  document.querySelectorAll('.nav-item[data-view]').forEach(b => b.classList.toggle('active', b.dataset.view === name));
+  document.querySelectorAll('.view').forEach(v => v.classList.toggle('active', v.id === 'view-' + name));
+  if (name === 'harness') loadHarness();
+  if (name === 'skills') loadSkills();
+  if (name === 'mcp') loadMcp();
+}
+
+/* ================================================================
+   会话管理（原有全部功能）
+   ================================================================ */
+
 function renderToolPanel() {
   const el = document.getElementById('toolList');
   el.innerHTML = TOOLS.map(t => `
@@ -661,7 +844,7 @@ function toggleToolPanel(e) {
 }
 document.addEventListener('click', e => {
   const dd = document.getElementById('toolDropdown');
-  if (!dd.contains(e.target)) document.getElementById('toolPanel').classList.remove('open');
+  if (dd && !dd.contains(e.target)) document.getElementById('toolPanel').classList.remove('open');
 });
 function onToolCheck() {
   selectedTools = new Set(Array.from(document.querySelectorAll('#toolList input:checked')).map(i => i.value));
@@ -669,7 +852,6 @@ function onToolCheck() {
   updateToolBtnLabel();
 }
 function setAllTools(v) {
-  // 先同步 DOM checkbox，再统一读取（避免 onToolCheck 用旧 DOM 状态覆盖）
   document.querySelectorAll('#toolList input[type=checkbox]').forEach(cb => cb.checked = v);
   onToolCheck();
 }
@@ -683,20 +865,13 @@ function selectDefaultTools() {
 function updateToolBtnLabel() {
   const n = selectedTools.size;
   document.getElementById('toolBtnLabel').textContent = `${n} 个工具`;
-  // 无工具时禁用扫描
   const btn = document.getElementById('scanBtn');
-  if (btn) {
-    btn.disabled = n === 0;
-    btn.title = n === 0 ? '请至少选择一个扫描工具' : '';
-  }
+  if (btn) { btn.disabled = n === 0; btn.title = n === 0 ? '请至少选择一个扫描工具' : ''; }
 }
 
-/* ================= 时间范围 ================= */
 function setupTimeSeg() {
   const seg = document.getElementById('timeSeg');
-  seg.querySelectorAll('button').forEach(b => {
-    b.classList.toggle('active', b.dataset.range === timeRange);
-  });
+  seg.querySelectorAll('button').forEach(b => b.classList.toggle('active', b.dataset.range === timeRange));
   const custom = timeRange === 'custom';
   document.getElementById('dateInputs').classList.toggle('show', custom);
   if (custom) {
@@ -727,21 +902,14 @@ document.getElementById('timeSeg').addEventListener('click', e => {
   loadSessions();
 });
 
-/* ================= 扫描 ================= */
 async function loadSessions() {
-  if (selectedTools.size === 0) {
-    showToast('请至少选择一个扫描工具', 'error');
-    return;
-  }
-  const tools = [...selectedTools].join(',');
-  const q = getTimeParams();
-  const qs = new URLSearchParams({ tools, ...q }).toString();
+  if (selectedTools.size === 0) { showToast('请至少选择一个扫描工具', 'error'); return; }
+  const qs = new URLSearchParams({ tools: [...selectedTools].join(','), ...getTimeParams() }).toString();
   renderSkeleton();
   setStatus('扫描中…');
   try {
     const t0 = performance.now();
     const data = await api('/api/sessions?' + qs);
-    lastScanElapsed = data.elapsed_ms;
     allSessions = data.sessions || [];
     applySearch();
     document.getElementById('statSizeAll').textContent = data.total_size_human;
@@ -766,20 +934,15 @@ function renderToolCounts() {
   });
 }
 function renderSkeleton() {
-  const rows = Array.from({ length: 7 }, (_, i) => `
+  const rows = Array.from({ length: 6 }, () => `
     <div class="sk-row">
-      <div class="sk" style="width:18px"></div>
-      <div class="sk" style="flex:2"></div>
-      <div class="sk" style="flex:1"></div>
-      <div class="sk" style="flex:1.4"></div>
-      <div class="sk" style="width:60px"></div>
-      <div class="sk" style="width:50px"></div>
-      <div class="sk" style="width:90px"></div>
+      <div class="sk" style="width:18px"></div><div class="sk" style="flex:2"></div>
+      <div class="sk" style="flex:1"></div><div class="sk" style="flex:1.4"></div>
+      <div class="sk" style="width:60px"></div><div class="sk" style="width:50px"></div><div class="sk" style="width:90px"></div>
     </div>`).join('');
   document.getElementById('content').innerHTML = `<div class="card skeleton">${rows}</div>`;
 }
 
-/* ================= 搜索 / 排序 / 渲染 ================= */
 function getFilteredSessions() {
   const q = document.getElementById('searchInput').value.trim().toLowerCase();
   if (!q) return allSessions;
@@ -791,7 +954,6 @@ function getFilteredSessions() {
     return title.includes(q) || cwd.includes(q) || filename.includes(q) || group.includes(q);
   });
 }
-
 function applySearch() {
   renderGroups(getFilteredSessions(), document.getElementById('searchInput').value.trim().toLowerCase());
   updateStats();
@@ -823,7 +985,7 @@ function renderGroups(sessions, q) {
     content.innerHTML = `<div class="card empty-state">
       <div class="e-ico">🔍</div>
       <div class="e-title">${q ? '没有匹配的会话' : '当前条件下没有会话'}</div>
-      <div class="e-hint">${q ? '试试更换关键词，或放宽时间范围。' : '尝试放宽时间范围、勾选更多工具，或点击右上角工具列表添加 Aider / OpenCode 等。'}</div>
+      <div class="e-hint">${q ? '试试更换关键词，或放宽时间范围。' : '尝试放宽时间范围、勾选更多工具（Aider / OpenCode 等）。'}</div>
     </div>`;
     return;
   }
@@ -838,7 +1000,6 @@ function renderGroups(sessions, q) {
       return sortDesc ? -cmp : cmp;
     });
   }
-
   let html = '';
   for (const [tool, list] of Object.entries(byTool)) {
     const color = tColor(tool);
@@ -868,19 +1029,20 @@ function renderGroups(sessions, q) {
     for (const s of list) {
       const u = s.user_count || 0, a = s.assistant_count || 0, c = s.conversation_count || 0;
       const title = s.session_title || s.first_message || '(无标题)';
-      const ftBadge = s.file_type === 'kimi' ? '<span class="badge kimi">KIMI</span>'
+      const ftBadge = s.file_type === 'kimi' ? '<span class="badge">KIMI</span>'
         : s.file_type === 'hermes' ? '<span class="badge">DB</span>'
         : s.file_type === 'jsonl' ? '<span class="badge">JSONL</span>'
         : s.file_type === 'json' ? '<span class="badge">JSON</span>' : '';
       const hasAux = s.aux_paths && s.aux_paths.length ? ` +${s.aux_paths.length}` : '';
       const groupKey = s.session_group || s.dir || '';
+      const cwdShow = (s.cwd_human || s.cwd || '');
       html += `<tr data-path="${escapeHtml(s.path)}" data-aux="${escapeHtml((s.aux_paths || []).join(','))}" ${s.session_dir ? `data-session-dir="${escapeHtml(s.session_dir)}"` : ''}>
         <td class="check"><input type="checkbox" class="row-check" onchange="onRowCheck(this)"></td>
         <td class="main-cell" title="${escapeHtml(s.first_message || '')}">
           <div class="s-title">${highlight(title, q)}${ftBadge}</div>
           <div class="s-sub" title="${escapeHtml(s.display_path || s.path)}">${escapeHtml(s.filename)}${hasAux}</div>
         </td>
-        <td class="cwd-cell" title="${escapeHtml(s.cwd || '')}">${escapeHtml((s.cwd_human || s.cwd || '').length > 36 ? (s.cwd_human || s.cwd || '').slice(0, 36) + '…' : (s.cwd_human || s.cwd || ''))}
+        <td class="cwd-cell" title="${escapeHtml(s.cwd || '')}">${escapeHtml(cwdShow.length > 36 ? cwdShow.slice(0, 36) + '…' : cwdShow)}
           <div class="g-sub">${escapeHtml(groupKey.length > 30 ? groupKey.slice(0, 30) + '…' : groupKey)}</div>
         </td>
         <td class="msg-cell">${c ? `<span class="u">👤${u}</span> <span class="a">🤖${a}</span>` : '<span style="color:var(--faint)">—</span>'} <span class="ev">/${s.message_count || '-'}</span></td>
@@ -896,12 +1058,9 @@ function renderGroups(sessions, q) {
     html += '</tbody></table></div></div>';
   }
   content.innerHTML = html;
-
-  // 分布图（仅在首次渲染时刷新）
   renderDistribution();
 }
 
-/* ================= 分布图 ================= */
 function renderDistribution() {
   const byTool = {};
   allSessions.forEach(s => {
@@ -909,7 +1068,7 @@ function renderDistribution() {
     b.count++; b.size += s.size || 0;
   });
   const entries = Object.entries(byTool).sort((a, b) => b[1].size - a[1].size);
-  if (!entries.length) return;
+  if (!entries.length) { document.getElementById('distBars').innerHTML = ''; document.getElementById('distLegend').innerHTML = ''; return; }
   const maxCount = Math.max(...entries.map(e => e[1].count), 1);
   const maxSize = Math.max(...entries.map(e => e[1].size), 1);
   const bars = entries.slice(0, 7).map(([tool, b]) => {
@@ -926,7 +1085,6 @@ function renderDistribution() {
   document.getElementById('distLegend').innerHTML = legend;
 }
 
-/* ================= 选择与操作 ================= */
 function onRowCheck(cb) {
   const tr = cb.closest('tr');
   tr.classList.toggle('selected', cb.checked);
@@ -936,8 +1094,7 @@ function onRowCheck(cb) {
 function syncGroupHeader(group) {
   if (!group) return;
   const boxes = group.querySelectorAll('.row-check');
-  const checked = group.querySelectorAll('.row-check:checked').length;
-  group.querySelector('.group-header input').checked = boxes.length > 0 && checked === boxes.length;
+  group.querySelector('.group-header input').checked = boxes.length > 0 && group.querySelectorAll('.row-check:checked').length === boxes.length;
 }
 function toggleGroup(header) {
   const content = header.nextElementSibling;
@@ -952,24 +1109,18 @@ function toggleTool(tool, checked) {
   updateStats();
 }
 function selectAll(checked) {
-  document.querySelectorAll('.row-check').forEach(cb => {
-    cb.checked = checked;
-    cb.closest('tr').classList.toggle('selected', checked);
-  });
+  document.querySelectorAll('.row-check').forEach(cb => { cb.checked = checked; cb.closest('tr').classList.toggle('selected', checked); });
   document.querySelectorAll('.group-header input').forEach(cb => cb.checked = checked);
   updateStats();
 }
 function invertSelect() {
-  document.querySelectorAll('.row-check').forEach(cb => {
-    cb.checked = !cb.checked;
-    cb.closest('tr').classList.toggle('selected', cb.checked);
-  });
+  document.querySelectorAll('.row-check').forEach(cb => { cb.checked = !cb.checked; cb.closest('tr').classList.toggle('selected', cb.checked); });
   document.querySelectorAll('.group').forEach(syncGroupHeader);
   updateStats();
 }
 function getSelectedPaths() {
   return Array.from(document.querySelectorAll('tr[data-path]')).filter(tr => tr.querySelector('.row-check').checked).flatMap(tr => {
-    if (tr.dataset.sessionDir) return [tr.dataset.sessionDir];  // Kimi 合并会话：删整个目录
+    if (tr.dataset.sessionDir) return [tr.dataset.sessionDir];
     const paths = [tr.dataset.path];
     if (tr.dataset.aux) paths.push(...tr.dataset.aux.split(',').filter(Boolean));
     return paths;
@@ -988,10 +1139,9 @@ function updateStats() {
 }
 function focusSelected() {
   const first = document.querySelector('tr.selected');
-  if (first) { first.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+  if (first) first.scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
 
-/* ================= 删除 ================= */
 function askDelete() {
   const paths = getSelectedPaths();
   if (!paths.length) { showToast('请先勾选要删除的会话', 'error'); return; }
@@ -1002,17 +1152,35 @@ function askDelete() {
   const breakdown = Object.entries(perTool).map(([t, n]) => `${t}×${n}`).join('，');
   const hasHermes = sel.some(s => s.tool === 'hermes');
   const sample = sel.slice(0, 6).map(s => s.path).join('\n') + (sel.length > 6 ? `\n… 等共 ${paths.length} 项` : '');
-  document.getElementById('confirmBody').innerHTML = `
-    <div style="font-size:13.5px;line-height:1.9">
+  confirmDialog({
+    title: '确认删除',
+    okText: '🗑️ 确认删除',
+    html: `
       <p style="margin:0 0 4px">将删除 <b>${num(paths.length)}</b> 项（<b>${breakdown}</b>），合计 <b>${formatSize(size)}</b>。</p>
       <p style="margin:0 0 8px;color:var(--muted);font-size:12.5px">默认移入回收站（<code>~/.agent-manager-trash</code>），随时可恢复。</p>
       <div class="confirm-items">${escapeHtml(sample)}</div>
       <label class="label-check"><input type="checkbox" id="permanentDelete"> <span>永久删除（不经过回收站，<b>不可恢复</b>，立即释放空间）</span></label>
-      ${hasHermes ? '<div class="confirm-note">⚠️ 包含 Hermes 会话：其数据存于数据库，始终为永久删除。</div>' : ''}
-    </div>`;
+      ${hasHermes ? '<div class="confirm-note">⚠️ 包含 Hermes 会话：其数据存于数据库，始终为永久删除。</div>' : ''}`,
+    onOk: doDelete,
+  });
+}
+let _confirmCb = null;
+function confirmDialog(opts) {
+  _confirmCb = opts.onOk || null;
+  document.getElementById('confirmTitle').textContent = opts.title || '确认';
+  document.getElementById('confirmBody').innerHTML =
+    `<div style="font-size:13.5px;line-height:1.9">${opts.html || escapeHtml(opts.message || '')}</div>`;
+  const okBtn = document.getElementById('confirmOkBtn');
+  okBtn.textContent = opts.okText || '确认';
+  okBtn.className = opts.okClass === 'ok' ? 'btn ok' : 'btn danger';
   document.getElementById('confirmModal').classList.add('active');
 }
-function closeConfirm() { document.getElementById('confirmModal').classList.remove('active'); }
+function closeConfirm() { document.getElementById('confirmModal').classList.remove('active'); _confirmCb = null; }
+function confirmOk() {
+  const cb = _confirmCb;
+  closeConfirm();
+  if (cb) Promise.resolve(cb()).catch(e => showToast('操作失败: ' + e.message, 'error'));
+}
 async function doDelete() {
   const permanent = document.getElementById('permanentDelete').checked;
   const paths = getSelectedPaths();
@@ -1031,7 +1199,6 @@ async function doDelete() {
   } catch (e) { showToast('删除失败: ' + e.message, 'error'); }
 }
 
-/* ================= 回收站 ================= */
 async function refreshTrashCount() {
   try {
     const data = await api('/api/trash');
@@ -1048,10 +1215,10 @@ async function openTrash() {
     document.getElementById('trashModalCount').textContent = `（${num(data.items.length)} 条 · ${formatSize(total)}）`;
     const body = document.getElementById('trashBody');
     if (!data.items.length) {
-      body.innerHTML = '<div class="empty-state"><div class="e-ico">🗑️</div><div class="e-title">回收站是空的</div><div class="e-hint">删除会话时其实只是移到回收站，可从「删除确认」或此处恢复。</div></div>';
+      body.innerHTML = '<div class="empty-state"><div class="e-ico">🗑️</div><div class="e-title">回收站是空的</div><div class="e-hint">删除会话或 Skill 时只是移到回收站，可从此处恢复。</div></div>';
       return;
     }
-    let html = '<table class="trash-table"><thead><tr><th>原路径</th><th style="width:90px">大小</th><th style="width:150px">删除时间</th><th style="width:150px">操作</th></tr></thead><tbody>';
+    let html = '<table><thead><tr><th>原路径</th><th style="width:90px">大小</th><th style="width:150px">删除时间</th><th style="width:150px">操作</th></tr></thead><tbody>';
     for (const it of data.items) {
       const warn = it.exists ? '' : ' <span style="color:var(--danger);font-size:12px">(数据缺失)</span>';
       html += `<tr>
@@ -1059,8 +1226,8 @@ async function openTrash() {
         <td class="num-cell">${it.size_human}</td>
         <td class="time-cell">${escapeHtml(it.trashed_at)}</td>
         <td class="op">
-          <button class="restore" ${it.exists ? '' : 'disabled'} onclick="restoreTrashItem('${it.id}')">恢复</button>
-          <button class="del" onclick="deleteTrashItem('${it.id}')">永久删除</button>
+          <button class="btn sm" style="color:var(--primary);border-color:var(--primary)" ${it.exists ? '' : 'disabled'} onclick="restoreTrashItem('${it.id}')">恢复</button>
+          <button class="btn sm" style="color:var(--danger);border-color:var(--danger)" onclick="deleteTrashItem('${it.id}')">永久删除</button>
         </td></tr>`;
     }
     html += '</tbody></table><div style="margin-top:10px;font-size:11.5px;color:var(--faint)">回收站目录：' + escapeHtml(data.root) + '</div>';
@@ -1081,30 +1248,42 @@ async function restoreTrashItem(id) {
   } catch (e) { showToast('恢复失败: ' + e.message, 'error'); }
 }
 async function deleteTrashItem(id) {
-  if (!confirm('从回收站彻底删除此条目？不可恢复。')) return;
-  try {
+  confirmDialog({
+    title: '永久删除回收站条目',
+    message: '从回收站彻底删除此条目？不可恢复。',
+    okText: '🗑️ 永久删除',
+    onOk: async () => {
+      try {
     const res = await api('/api/trash/delete', {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids: [id] })
     });
-    showToast(res.deleted.length ? '已彻底删除' : '删除失败: ' + (res.failed[0] || {}).error, res.deleted.length ? 'success' : 'error');
-    openTrash(); refreshTrashCount();
-  } catch (e) { showToast('删除失败: ' + e.message, 'error'); }
+      showToast(res.deleted.length ? '已彻底删除' : '删除失败: ' + (res.failed[0] || {}).error, res.deleted.length ? 'success' : 'error');
+      openTrash(); refreshTrashCount();
+      } catch (e) { showToast('删除失败: ' + e.message, 'error'); }
+    },
+  });
 }
 async function emptyTrash() {
-  if (!confirm('确定清空回收站？所有条目将被彻底删除，不可恢复。')) return;
-  try {
+  confirmDialog({
+    title: '清空回收站',
+    message: '确定清空回收站？所有条目将被彻底删除，不可恢复。',
+    okText: '🗑️ 清空回收站',
+    onOk: async () => {
+      try {
     const res = await api('/api/trash/empty', { method: 'POST' });
-    showToast(`已清空 ${res.removed} 项`);
-    openTrash(); refreshTrashCount();
-  } catch (e) { showToast('清空失败: ' + e.message, 'error'); }
+      showToast(`已清空 ${res.removed} 项`);
+      openTrash(); refreshTrashCount();
+      } catch (e) { showToast('清空失败: ' + e.message, 'error'); }
+    },
+  });
 }
 
-/* ================= 清理索引 / 导出 / 实用 ================= */
 async function cleanupStaleIndex() {
   try {
     const res = await api('/api/cleanup-stale-index', { method: 'POST' });
     const msg = `Kimi ${res.kimi_removed} 条，Codex ${res.codex_removed} 条，Orca ${res.orca_removed} 条`;
-    showToast(msg, (res.kimi_removed + res.codex_removed + res.orca_removed) ? 'success' : 'info');
+    const total = res.kimi_removed + res.codex_removed + res.orca_removed;
+    showToast(total ? msg : '没有需要清理的失效索引', total ? 'success' : 'info');
     loadSessions();
   } catch (e) { showToast('清理失败: ' + e.message, 'error'); }
 }
@@ -1130,26 +1309,11 @@ async function exportCsv() {
 async function openInFinder(encodedPath) {
   try {
     const res = await api('/api/open?path=' + encodedPath);
-    if (res.opened) showToast('已在文件管理器打开: ' + res.opened);
+    if (res.opened) showToast('已在文件管理器打开');
   } catch (e) { showToast('打开失败: ' + e.message, 'error'); }
 }
+function copyPath(encodedPath) { copyText(decodeURIComponent(encodedPath), '路径已复制'); }
 
-function copyPath(encodedPath) {
-  const path = decodeURIComponent(encodedPath);
-  const done = () => showToast('路径已复制');
-  if (navigator.clipboard && navigator.clipboard.writeText) {
-    navigator.clipboard.writeText(path).then(done).catch(() => { fallbackCopy(path); done(); });
-  } else { fallbackCopy(path); done(); }
-}
-function fallbackCopy(text) {
-  const ta = document.createElement('textarea');
-  ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
-  document.body.appendChild(ta); ta.select();
-  try { document.execCommand('copy'); } catch (e) {}
-  ta.remove();
-}
-
-/* ================= 预览 ================= */
 async function previewSession(encodedPath) {
   const path = decodeURIComponent(encodedPath);
   currentPreviewTab = 'conversation';
@@ -1252,7 +1416,6 @@ function toggleExpand(btn) {
 function formatTimestamp(ts) {
   if (!ts) return '';
   try {
-    // 兼容秒级时间戳（10 位）与毫秒（13 位）
     if (typeof ts === 'number' && ts < 1e12) ts = ts * 1000;
     const d = new Date(ts);
     if (isNaN(d.getTime())) return ts;
@@ -1261,14 +1424,430 @@ function formatTimestamp(ts) {
 }
 function closeModal() { document.getElementById('previewModal').classList.remove('active'); }
 
+/* ================================================================
+   Harness 配置管理
+   ================================================================ */
+async function loadHarness(force = false) {
+  const rootEl = document.getElementById('harnessRoot');
+  if (force || !harnessFilesCache) {
+    document.getElementById('harnessFiles').innerHTML = '<div class="empty-state"><div class="e-ico">⏳</div><div class="e-title">加载中…</div></div>';
+    try {
+      const data = await api('/api/harness/list');
+      harnessFilesCache = data.items || [];
+      rootEl.textContent = '管理目录：' + data.root;
+      document.getElementById('navHarnessBadge').textContent = harnessFilesCache.filter(f => !f.is_backup).length;
+      renderHarnessFiles();
+      loadHarnessHealth();
+    } catch (e) {
+      document.getElementById('harnessFiles').innerHTML = '<div class="empty-state"><div class="e-title">加载失败</div><div class="e-hint">' + escapeHtml(e.message) + '</div></div>';
+    }
+  }
+  if (harnessSelectedFile) openHarnessFile(harnessSelectedFile);
+}
+function renderHarnessFiles() {
+  const items = (harnessFilesCache || []).filter(f => !f.is_backup);
+  const cats = {};
+  items.forEach(f => { (cats[f.category] = cats[f.category] || []).push(f); });
+  const ico = { json: '📋', md: '📝', txt: '📄', toml: '⚙️', yml: '⚙️' };
+  let html = '';
+  for (const [cat, list] of Object.entries(cats)) {
+    html += `<div class="h-file-cat">${cat}</div>`;
+    for (const f of list) {
+      const cls = harnessSelectedFile === f.path ? 'active' : '';
+      html += `<div class="h-file ${cls}" onclick="openHarnessFile('${escapeHtml(f.path)}')">
+        <span class="h-ico">${ico[f.ext] || '📄'}</span>
+        <span class="h-name">${escapeHtml(f.name)}</span>
+        <span class="h-size">${f.size_human}</span>
+      </div>`;
+    }
+  }
+  document.getElementById('harnessFiles').innerHTML = html || '<div class="empty-state"><div class="e-title">没有配置文件</div></div>';
+}
+async function loadHarnessHealth() {
+  try {
+    const h = await api('/api/harness/health');
+    const errs = h.errors || [];
+    document.getElementById('harnessHealth').innerHTML = errs.length
+      ? `<div class="card" style="padding:10px 14px;margin-bottom:14px;border-color:var(--danger)">
+          <span style="color:var(--danger);font-weight:600">⚠️ ${errs.length} 个配置存在问题：</span>
+          ${errs.map(e => `<span style="font-family:var(--mono);font-size:12px;margin-left:10px">${escapeHtml(e.name)} — ${escapeHtml(e.detail)}</span>`).join('')}
+        </div>`
+      : `<div class="card" style="padding:10px 14px;margin-bottom:14px;border-color:var(--ok)">
+          <span style="color:var(--ok)">✅ ${h.total} 个配置文件均正常 · 共 ${h.checks.reduce((a, c) => a + c.backup_count, 0)} 份历史备份</span>
+        </div>`;
+  } catch (e) {}
+}
+async function openHarnessFile(pathStr) {
+  harnessSelectedFile = pathStr;
+  harnessEditMode = false;
+  renderHarnessFiles();
+  const ed = document.getElementById('harnessEditor');
+  ed.innerHTML = '<div class="empty-state"><div class="e-ico">⏳</div><div class="e-title">加载中…</div></div>';
+  try {
+    const d = await api('/api/harness/get?path=' + encodeURIComponent(pathStr));
+    if (d.error) { ed.innerHTML = '<div class="empty-state"><div class="e-title">' + escapeHtml(d.error) + '</div></div>'; return; }
+    const hasSecret = !!d.parsed_masked && JSON.stringify(d.parsed_masked) !== JSON.stringify(d.parsed);
+    const maskedHtml = d.parsed_masked
+      ? `<pre>${escapeHtml(JSON.stringify(d.parsed_masked, null, 2))}</pre>`
+      : (d.parse_error ? `<pre style="border-color:var(--danger);color:var(--danger)">JSON 解析失败：${escapeHtml(d.parse_error)}</pre>` : `<pre>${escapeHtml(d.content)}</pre>`);
+    ed.innerHTML = `
+      <div class="h-editor-head">
+        <span class="h-title">${escapeHtml(d.name)}</span>
+        <span class="h-meta">${formatSize(d.size)} · ${escapeHtml(d.display_path)}</span>
+        <span class="spacer"></span>
+        ${d.is_json && d.parsed ? `<button class="btn sm" title="复制 JSON" onclick="copyText('${escapeHtml(JSON.stringify(d.parsed, null, 2).replace(/'/g, "\\'"))}')">⧉ 复制 JSON</button>` : ''}
+        <button class="btn sm primary" id="harnessEditBtn" onclick="harnessEnterEdit()">✏️ 编辑</button>
+        <button class="btn sm" id="harnessBackupBtn" onclick="harnessShowBackups()">🗂 备份</button>
+      </div>
+      <div class="h-editor-body">
+        ${hasSecret ? '<div class="h-secret-note">🔒 该文件包含 API Key / Token 等敏感字段，已脱敏显示；编辑时请谨慎。' + (d.masked ? '' : '') + '</div>' : ''}
+        <div class="h-tabs">
+          <button class="h-tab active" onclick="harnessTab(this,'masked')">🔎 脱敏视图</button>
+          <button class="h-tab" onclick="harnessTab(this,'raw')">📄 原文</button>
+        </div>
+        <div id="harnessContentView">${maskedHtml}</div>
+      </div>`;
+    window._harnessData = d;
+  } catch (e) {
+    ed.innerHTML = '<div class="empty-state"><div class="e-title">加载失败</div><div class="e-hint">' + escapeHtml(e.message) + '</div></div>';
+  }
+}
+function harnessTab(btn, which) {
+  btn.parentElement.querySelectorAll('.h-tab').forEach(b => b.classList.toggle('active', b === btn));
+  const d = window._harnessData;
+  if (!d) return;
+  const view = which === 'masked'
+    ? (d.parsed_masked ? `<pre>${escapeHtml(JSON.stringify(d.parsed_masked, null, 2))}</pre>` : `<pre>${escapeHtml(d.content)}</pre>`)
+    : `<pre>${escapeHtml(d.content)}</pre>`;
+  document.getElementById('harnessContentView').innerHTML = view;
+}
+function harnessEnterEdit() {
+  const d = window._harnessData;
+  if (!d || !d.editable) { showToast('该文件类型不支持编辑', 'error'); return; }
+  harnessEditMode = true;
+  document.getElementById('harnessContentView').innerHTML = `
+    <textarea class="h-edit-area" id="harnessEditArea" spellcheck="false">${escapeHtml(d.content)}</textarea>
+    <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
+      <button class="btn primary sm" onclick="harnessSave()">💾 保存（自动备份）</button>
+      <button class="btn sm" onclick="harnessCancelEdit()">取消</button>
+      <span style="font-size:11.5px;color:var(--faint);align-self:center">JSON 文件保存前会做合法性校验，失败则不写入</span>
+    </div>`;
+}
+function harnessCancelEdit() { openHarnessFile(harnessSelectedFile); }
+async function harnessSave() {
+  const content = document.getElementById('harnessEditArea').value;
+  try {
+    const r = await api('/api/harness/save', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: harnessSelectedFile, content })
+    });
+    if (r.ok) {
+      showToast('已保存，备份: ' + PathName(r.backup));
+      openHarnessFile(harnessSelectedFile);
+      loadHarnessHealth();
+    } else {
+      showToast('保存失败: ' + r.error, 'error');
+    }
+  } catch (e) { showToast('保存失败: ' + e.message, 'error'); }
+}
+function PathName(p) { return p ? p.split('/').pop() : ''; }
+async function harnessShowBackups() {
+  try {
+    const data = await api('/api/harness/backups?path=' + encodeURIComponent(harnessSelectedFile));
+    if (data.error) { showToast(data.error, 'error'); return; }
+    const body = data.items.length
+      ? `<div class="h-backup-list">${data.items.map(b => `
+          <span class="h-backup-chip">${escapeHtml(b.name)}
+            <button class="restore" onclick="harnessRestoreBackup('${escapeHtml(b.path)}', '${escapeHtml(b.name)}')" title="恢复此备份">↺</button>
+            <button onclick="harnessDeleteBackup('${escapeHtml(b.path)}', '${escapeHtml(b.name)}')" title="删除备份">✕</button>
+          </span>`).join('')}</div>
+        <div style="margin-top:10px;font-size:12px;color:var(--faint)">恢复前会先备份当前版本；↺ 恢复 · ✕ 删除备份</div>`
+      : '<div class="empty-state"><div class="e-title">暂无备份</div><div class="e-hint">每次保存时自动生成 .bak 备份，从这里找回历史版本。</div></div>';
+    openGeneric('🗂 备份历史 — ' + PathName(harnessSelectedFile), body);
+  } catch (e) { showToast('加载失败: ' + e.message, 'error'); }
+}
+async function harnessRestoreBackup(bakPath, name) {
+  confirmDialog({
+    title: '恢复备份',
+    message: `从备份 ${name} 恢复？当前版本会先自动备份。`,
+    okText: '↺ 恢复',
+    okClass: 'ok',
+    onOk: async () => {
+      try {
+    const r = await api('/api/harness/restore', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: harnessSelectedFile, backup: bakPath })
+    });
+      if (r.ok) { showToast('已恢复'); closeGeneric(); openHarnessFile(harnessSelectedFile); loadHarnessHealth(); }
+      else showToast('恢复失败: ' + r.error, 'error');
+      } catch (e) { showToast('恢复失败: ' + e.message, 'error'); }
+    },
+  });
+}
+async function harnessDeleteBackup(bakPath, name) {
+  confirmDialog({
+    title: '删除备份',
+    message: `删除备份 ${name}（将移入回收站）？`,
+    okText: '🗑️ 删除',
+    onOk: async () => {
+      try {
+    const r = await api('/api/harness/delete-backup', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ backup: bakPath })
+    });
+      if (r.ok) { showToast('备份已删除'); harnessShowBackups(); }
+      else showToast('删除失败: ' + r.error, 'error');
+      } catch (e) { showToast('删除失败: ' + e.message, 'error'); }
+    },
+  });
+}
+
+/* ================================================================
+   Skill 管理
+   ================================================================ */
+async function loadSkills() {
+  document.getElementById('skillsContent').innerHTML = '<div class="card skeleton">' + Array.from({ length: 6 }, () =>
+    '<div class="sk-row"><div class="sk" style="flex:1"></div><div class="sk" style="flex:2"></div></div>').join('') + '</div>';
+  try {
+    const data = await api('/api/skills/list');
+    skillsCache = data.items || [];
+    document.getElementById('navSkillsBadge').textContent = skillsCache.length;
+    renderSkills();
+  } catch (e) {
+    document.getElementById('skillsContent').innerHTML = '<div class="empty-state"><div class="e-title">加载失败</div><div class="e-hint">' + escapeHtml(e.message) + '</div></div>';
+  }
+}
+function renderSkills() {
+  const q = document.getElementById('skillSearch').value.trim().toLowerCase();
+  const scopeF = document.getElementById('skillScopeFilter').value;
+  let list = skillsCache || [];
+  if (scopeF === 'project') list = list.filter(s => (s.scope || '').startsWith('project'));
+  else if (scopeF) list = list.filter(s => s.scope === scopeF);
+  if (q) list = list.filter(s => s.name.toLowerCase().includes(q) || (s.description || '').toLowerCase().includes(q));
+  const el = document.getElementById('skillsContent');
+  if (!list.length) {
+    el.innerHTML = '<div class="card empty-state"><div class="e-ico">📚</div><div class="e-title">没有找到 Skill</div><div class="e-hint">点击右上角「+ 新建 Skill」创建第一个，或调整筛选条件。</div></div>';
+    return;
+  }
+  el.innerHTML = `<div class="skill-grid">` + list.map(s => `
+    <div class="card skill-card" onclick="openSkillDetail('${escapeHtml(s.path)}')">
+      <div class="sk-name">${escapeHtml(s.name)}
+        <span class="scope-badge ${s.scope.startsWith('project') ? 'project' : s.scope}">${escapeHtml(s.scope)}</span>
+        ${s.valid_frontmatter ? '' : '<span class="fm-warn" title="frontmatter 缺失或无效">⚠️</span>'}
+      </div>
+      <div class="sk-desc">${escapeHtml((s.description || '(无描述)').slice(0, 120))}</div>
+      <div class="sk-meta">
+        <span>${escapeHtml(s.root_display)}</span>
+        <span style="margin-left:auto">${s.size_human} · ${s.mtime_human}</span>
+      </div>
+    </div>`).join('') + '</div>';
+}
+async function openSkillDetail(pathStr) {
+  try {
+    const d = await api('/api/skills/get?path=' + encodeURIComponent(pathStr));
+    if (d.error) { showToast(d.error, 'error'); return; }
+    const fm = Object.entries(d.frontmatter).map(([k, v]) => `<span class="chip"><b>${escapeHtml(k)}</b>: ${escapeHtml(String(v).slice(0, 50))}</span>`).join('') || '<span class="chip">无 frontmatter</span>';
+    const body = `
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">${fm}</div>
+      <div style="margin-bottom:10px;font-size:12px;color:var(--faint);font-family:var(--mono)">${escapeHtml(d.skill_file)}</div>
+      ${d.files.length ? `<div style="margin-bottom:10px"><b style="font-size:12.5px;color:var(--muted)">同目录文件 (${d.files.length})：</b>${d.files.map(f => `<span class="chip">${escapeHtml(f.name)}</span>`).join('')}</div>` : ''}
+      <pre>${escapeHtml(d.raw)}</pre>`;
+    const footer = `
+      <button class="btn" onclick="closeGeneric()">关闭</button>
+      <button class="btn primary" onclick="openSkillEdit('${escapeHtml(d.path)}', '${escapeHtml(d.name)}')">✏️ 编辑</button>
+      <button class="btn danger" onclick="deleteSkill('${escapeHtml(d.path)}', '${escapeHtml(d.name)}')">🗑️ 删除</button>`;
+    openGeneric('📚 ' + d.name, body, footer);
+  } catch (e) { showToast('加载失败: ' + e.message, 'error'); }
+}
+function openSkillEdit(pathStr, name) {
+  const d = window._genericSkillData;
+  document.getElementById('genericBody').innerHTML = `
+    <div class="skill-form">
+      <label>Skill 内容（SKILL.md，含 frontmatter）</label>
+      <textarea id="skillEditArea" spellcheck="false">${escapeHtml(d.raw)}</textarea>
+      <div style="display:flex;gap:8px;margin-top:10px">
+        <button class="btn primary" onclick="saveSkillEdit('${escapeHtml(pathStr)}')">💾 保存</button>
+        <button class="btn" onclick="openSkillDetail('${escapeHtml(pathStr)}')">取消</button>
+      </div>
+    </div>`;
+}
+async function saveSkillEdit(pathStr) {
+  const content = document.getElementById('skillEditArea').value;
+  try {
+    const r = await api('/api/skills/update', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: pathStr, content })
+    });
+    showToast(r.ok ? '已保存' : '保存失败: ' + r.error, r.ok ? 'success' : 'error');
+    if (r.ok) { closeGeneric(); loadSkills(); }
+  } catch (e) { showToast('保存失败: ' + e.message, 'error'); }
+}
+async function deleteSkill(pathStr, name) {
+  confirmDialog({
+    title: '删除 Skill',
+    message: `确定删除 Skill「${name}」？将移入回收站，可恢复。`,
+    okText: '🗑️ 删除',
+    onOk: async () => {
+      try {
+    const r = await api('/api/skills/delete', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: pathStr })
+    });
+      if (r.ok) { showToast(`已删除「${name}」（回收站可恢复）`); closeGeneric(); loadSkills(); refreshTrashCount(); }
+      else showToast('删除失败: ' + r.error, 'error');
+      } catch (e) { showToast('删除失败: ' + e.message, 'error'); }
+    },
+  });
+}
+function openSkillCreate() {
+  const body = `
+    <div class="skill-form">
+      <label>名称（字母、数字、._-）</label>
+      <input id="newSkillName" placeholder="例如: deploy-to-nginx">
+      <label>一句话描述</label>
+      <input id="newSkillDesc" placeholder="何时使用这个 Skill">
+      <label>存放位置（scope）</label>
+      <select id="newSkillScope">
+        <option value="user">user — ~/.pi/agent/skills（个人用户级）</option>
+        <option value="global">global — ~/.agents/skills（全局可移植）</option>
+      </select>
+      <label>SKILL.md 正文（会生成 frontmatter）</label>
+      <textarea id="newSkillBody" spellcheck="false" placeholder="## When to Use
+…
+
+## Procedure
+…
+
+## Pitfalls
+…"></textarea>
+    </div>`;
+  const footer = `
+    <button class="btn" onclick="closeGeneric()">取消</button>
+    <button class="btn primary" onclick="createSkill()">✨ 创建</button>`;
+  openGeneric('✨ 新建 Skill', body, footer);
+}
+async function createSkill() {
+  const name = document.getElementById('newSkillName').value.trim();
+  const desc = document.getElementById('newSkillDesc').value.trim();
+  const scope = document.getElementById('newSkillScope').value;
+  const content = document.getElementById('newSkillBody').value;
+  try {
+    const r = await api('/api/skills/create', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, description: desc, content, scope })
+    });
+    if (r.ok) { showToast(`已创建 Skill「${r.name}」`); closeGeneric(); loadSkills(); }
+    else showToast('创建失败: ' + r.error, 'error');
+  } catch (e) { showToast('创建失败: ' + e.message, 'error'); }
+}
+
+/* ================================================================
+   MCP 管理
+   ================================================================ */
+async function loadMcp() {
+  document.getElementById('mcpContent').innerHTML = '<div class="card skeleton">' + Array.from({ length: 5 }, () =>
+    '<div class="sk-row"><div class="sk" style="flex:1"></div><div class="sk" style="flex:3"></div></div>').join('') + '</div>';
+  try {
+    const data = await api('/api/mcp/servers');
+    mcpCache = data;
+    document.getElementById('mcpServerCount').textContent = num(data.servers.length);
+    document.getElementById('mcpToolCount').textContent = num(data.total_tools);
+    document.getElementById('mcpCacheSize').textContent = data.cache_size_human;
+    document.getElementById('mcpCacheMeta').textContent = '更新于 ' + data.cache_mtime;
+    document.getElementById('navMcpBadge').textContent = data.servers.length + '/' + data.total_tools;
+    renderMcp();
+  } catch (e) {
+    document.getElementById('mcpContent').innerHTML = '<div class="empty-state"><div class="e-title">加载失败</div><div class="e-hint">' + escapeHtml(e.message) + '</div></div>';
+  }
+}
+function renderMcp() {
+  const q = document.getElementById('mcpSearch').value.trim().toLowerCase();
+  const el = document.getElementById('mcpContent');
+  if (!mcpCache || !mcpCache.servers.length) {
+    el.innerHTML = '<div class="card empty-state"><div class="e-ico">🔌</div><div class="e-title">没有发现 MCP 服务器</div><div class="e-hint">pi 的 mcp-cache.json 为空或不存在。</div></div>';
+    return;
+  }
+  let html = '';
+  for (const srv of mcpCache.servers) {
+    const collapsed = lsGet('mcp.collapsed.' + srv.name, '0') === '1';
+    const toolsPreview = srv.tools_summary.map(t =>
+      `<span class="chip" title="${escapeHtml(t.description || '')}">${escapeHtml(t.name)}</span>`).join('') +
+      (srv.tool_count > 5 ? `<span class="chip">+${srv.tool_count - 5}…</span>` : '');
+    html += `<div class="card mcp-server${collapsed ? ' collapsed' : ''}" data-server="${escapeHtml(srv.name)}">
+      <div class="mcp-server-head" onclick="toggleMcpServer(this)">
+        <span class="m-dot"></span>
+        <span class="m-name">${escapeHtml(srv.name)}</span>
+        <span class="m-meta">${srv.tool_count} 工具 · hash ${escapeHtml(srv.config_hash)}</span>
+        <span class="m-arrow">▼</span>
+      </div>
+      ${collapsed ? '' : `<div class="mcp-tools" style="padding:10px 16px">${toolsPreview}</div>
+      <div class="mcp-tools" id="mcpTools-${escapeHtml(srv.name)}" data-loaded="0" style="padding:0"></div>`}
+    </div>`;
+  }
+  el.innerHTML = html;
+  if (q) loadAllToolDetails(q);
+}
+function toggleMcpServer(header) {
+  const box = header.closest('.mcp-server');
+  const name = box.dataset.server;
+  const wasCollapsed = box.classList.toggle('collapsed');
+  lsSet('mcp.collapsed.' + name, wasCollapsed ? '1' : '0');
+  if (!wasCollapsed && !box.querySelector('[data-loaded="1"]')) {
+    renderMcpServerTools(name, box);
+  }
+}
+async function renderMcpServerTools(name, box) {
+  const container = box.querySelector('#mcpTools-' + CSS.escape(name));
+  if (!container) return;
+  container.dataset.loaded = '1';
+  container.innerHTML = '<div class="empty-state" style="padding:16px"><div class="e-ico">⏳</div><div class="e-title" style="font-size:13px">加载工具…</div></div>';
+  try {
+    const data = await api('/api/mcp/tools?server=' + encodeURIComponent(name));
+    container.innerHTML = renderToolRows(data.items || []);
+  } catch (e) {
+    container.innerHTML = '<div class="empty-state" style="padding:16px"><div class="e-title" style="font-size:13px">加载失败</div></div>';
+  }
+}
+function renderToolRows(items) {
+  if (!items.length) return '<div class="empty-state" style="padding:16px"><div class="e-title" style="font-size:13px">无工具</div></div>';
+  return `<table><thead><tr><th style="width:230px">工具名</th><th>描述</th><th style="width:130px">参数</th><th style="width:40px"></th></tr></thead><tbody>` +
+    items.map(t => `<tr class="tool-row">
+      <td><span class="t-name" title="点击复制 ${escapeHtml(t.full_name)}" onclick="copyText('${escapeHtml(t.tool)}', '工具名已复制: ' + '${escapeHtml(t.tool)}')">${escapeHtml(t.tool)}</span></td>
+      <td class="t-desc" title="${escapeHtml(t.description)}">${escapeHtml(t.description || '-')}</td>
+      <td><span class="t-params" title="${escapeHtml(t.params.map(p => p.name + (p.required ? '*' : '')).join(', '))}">${t.param_count ? t.param_count + ' 参' : '-'}</span></td>
+      <td><button class="t-copy" title="复制完整调用名 ${escapeHtml(t.full_name)}" onclick="copyText('${escapeHtml(t.full_name)}', '已复制: ' + '${escapeHtml(t.full_name)}')">⧉</button></td>
+    </tr>`).join('') + '</tbody></table>';
+}
+async function loadAllToolDetails(q) {
+  try {
+    const data = await api('/api/mcp/tools?q=' + encodeURIComponent(q));
+    document.getElementById('mcpContent').innerHTML = `
+      <div class="card" style="padding:8px 16px;margin-bottom:10px;font-size:12.5px;color:var(--muted)">
+        搜索「<b style="color:var(--primary)">${escapeHtml(q)}</b>」匹配 <b>${data.total}</b> 个工具
+      </div>
+      <div class="card">${renderToolRows(data.items || [])}</div>`;
+  } catch (e) {}
+}
+async function openMcpRaw() {
+  try {
+    const d = await api('/api/mcp/raw');
+    if (d.error) { showToast(d.error, 'error'); return; }
+    openGeneric('📜 mcp-cache.json（原始配置）', `<pre style="max-height:65vh">${escapeHtml(d.content)}</pre>`);
+  } catch (e) { showToast('加载失败: ' + e.message, 'error'); }
+}
+
+/* ================= 通用弹窗 ================= */
+function openGeneric(title, bodyHtml, footerHtml = '') {
+  document.getElementById('genericTitle').textContent = title;
+  document.getElementById('genericBody').innerHTML = bodyHtml;
+  const footer = document.getElementById('genericFooter');
+  footer.innerHTML = footerHtml || '<button class="btn" onclick="closeGeneric()">关闭</button>';
+  document.getElementById('genericModal').classList.add('active');
+}
+function closeGeneric() { document.getElementById('genericModal').classList.remove('active'); }
+
 /* ================= 初始化 ================= */
 renderToolPanel();
 updateToolBtnLabel();
 setupTimeSeg();
-/* 有选中时导出按钮才可用 */
-document.getElementById('searchInput').addEventListener('input', () => {
-  document.getElementById('exportBtn').disabled = false;
-});
 setInterval(refreshTrashCount, 15000);
 loadSessions();
 </script>

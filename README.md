@@ -1,41 +1,45 @@
 # Agent 管理器
 
-一个跨平台的 Agent 管理工具，目前支持会话管理，后续会逐步加入 Skill 管理、MCP 管理等功能。
+一个跨平台的 **AI 代理工作台**（产品化设计），四大模块：
 
-目前支持管理和清理以下 AI 客户端产生的会话文件：
-
-| 工具 | 状态 | 说明 |
-|------|------|------|
-| Claude Code | ✅ 默认 | `~/.claude/sessions`、`~/.claude/projects`、`~/.claude/history.jsonl` |
-| Codex | ✅ 默认 | `~/.codex/sessions`，同步清理 `state_5.sqlite` 失效索引 |
-| Orca | ✅ 默认 | `~/.config/orca/codex-runtime-home/...` |
-| Kimi Code | ✅ 默认 | `~/.kimi-code/sessions`（state.json + wire.jsonl 合并展示），同步清理 `session_index.jsonl` |
-| Pi | ✅ 默认 | `~/.pi/agent/sessions`、`~/.omp/agent/sessions` |
-| Hermes | ✅ 默认 | `~/.hermes/state.db`（SQLite，删除不可恢复） |
-| Aider | 🧪 可选 | `~/.aider` |
-| OpenCode | 🧪 可选 | `~/.local/share/opencode` |
-| Gemini CLI | 🧪 可选 | `~/.gemini/sessions` |
-| Cline | 🧪 可选 | `~/.config/Cline`、`~/.cline` |
-| Qwen Code | 🧪 可选 | `~/.qwen-code/sessions` |
-| Windsurf | 🧪 可选 | `~/.codeium/windsurf` |
-
-> 🧪 实验性工具只在对应目录真实存在时才会被扫描，不存在自动忽略。
+| 模块 | 说明 |
+|------|------|
+| 💬 会话管理 | 扫描/筛选/清理 12 种 AI 客户端的会话文件 |
+| ⚙️ Harness 配置 | 管理 pi 引擎配置文件：查看、安全编辑（自动备份）、恢复、健康检查 |
+| 📚 Skill 管理 | 浏览/搜索/新建/编辑/删除 Skill（user/global/project 多源扫描） |
+| 🔌 MCP 管理 | MCP 服务器与工具清单：搜索、复制调用名、原始配置查看 |
 
 ## 功能
 
-- 🔍 并发扫描多 AI 客户端会话文件（默认 6 个工具，可勾选更多）
-- 📅 **日期筛选**：全部 / 近 7 天 / 近 30 天 / 近 90 天 / 近 180 天 / 自定义起止日期
-- 📊 统计面板：会话数、磁盘占用、按工具分布条形图（数量 + 大小）
-- 🎨 现代化界面：深色/浅色主题切换、骨架屏加载、搜索高亮、状态记忆（记住你的筛选与折叠状态）
-- 📂 一键在系统文件管理器中打开会话所在目录
-- 🔃 点击表头按文件名 / 标题 / 目录 / 时间 / 大小排序
-- 🗑️ **回收站机制**：删除默认移入 `~/.agent-manager-trash`，可随时恢复或彻底清除
-- 🛡️ 关键数据文件保护：`state.db`、`history.jsonl`、`settings.json` 等一律拒绝删除
-- 📄 导出当前列表为 CSV（带中文标题，Excel 可直接打开）
-- 💬 会话预览：对话视图 / 原始 JSON 视图，消息可搜索高亮、长消息可折叠
-- 🧹 清理 Kimi / Codex / Orca 失效索引（会话删除后残留的索引记录）
-- ⧉ 一键复制会话完整路径
-- 🖥️ 跨平台：Windows、Linux、macOS
+### 💬 会话管理
+
+- 并发扫描 12 个 AI 客户端（Claude Code / Codex / Orca / Kimi Code / Pi / Hermes / Aider / OpenCode / Gemini CLI / Cline / Qwen Code / Windsurf）
+- 📅 日期筛选：全部 / 近 7 / 30 / 90 / 180 天 / 自定义起止日期
+- 📊 统计面板与按工具分布条形图；深色/浅色主题；搜索高亮；状态记忆
+- 🗑️ 回收站机制（删除默认可恢复）+ 关键数据文件保护 + CSRF 防护
+- 📄 CSV 导出、文件管理器定位、会话预览（对话视图/原始 JSON）
+
+### ⚙️ Harness 配置管理（~/.pi/agent）
+
+- 配置文件分类浏览（核心配置 / 模型 / 认证与信任 / 搜索 / MCP / 提示词）
+- 安全查看：**敏感字段（API Key / Token）自动脱敏**
+- 编辑保存：JSON 合法性校验，保存前**自动生成 .bak 时间戳备份**
+- 备份管理：列出历史备份、一键恢复（恢复前再备份当前）、删除备份
+- 健康检查：JSON 合法性 + 备份数量总览
+- 仅允许编辑 ~/.pi 内文件，越权拒绝
+
+### 📚 Skill 管理
+
+- 多源扫描：`~/.pi/agent/skills`（user）、`~/.agents/skills`（global）、`~/.pi/agent/projects-memory/*/skills`（project）
+- 卡片式浏览 + 名称/描述搜索 + scope 筛选 + frontmatter 有效性检查
+- 查看 SKILL.md 全文（frontmatter + 正文 + 同目录文件）
+- 新建（自动生成 frontmatter）/ 编辑（自动备份）/ 删除（进回收站可恢复）
+
+### 🔌 MCP 管理
+
+- 服务器清单（工具数 / hash）+ 工具明细表（名称/描述/参数）
+- 全文搜索工具、一键复制工具名或完整调用名
+- 原始 mcp-cache.json 查看
 
 ## 安装
 
@@ -125,6 +129,6 @@ pyinstaller Agent管理器.spec --clean --noconfirm
 推送 `v*` 标签即可触发 GitHub Actions 自动构建并发布到 Release：
 
 ```bash
-git tag v1.1.0
-git push origin v1.1.0
+git tag v2.0.0
+git push origin v2.0.0
 ```
