@@ -450,7 +450,7 @@ tbody tr:hover .op-cell .op-preview, tr.selected .op-cell .op-preview { visibili
         <span class="sep">—</span>
         <input type="date" id="dateTo">
       </div>
-      <button class="btn primary" onclick="loadSessions()">🔍 扫描</button>
+      <button class="btn primary" id="scanBtn" onclick="loadSessions()">🔍 扫描</button>
     </div>
     <div class="filter-row">
       <div class="search-wrap">
@@ -668,10 +668,27 @@ function onToolCheck() {
   lsSet('tools', JSON.stringify([...selectedTools]));
   updateToolBtnLabel();
 }
-function setAllTools(v) { selectedTools = v ? new Set(TOOLS.map(t => t.id)) : new Set(); onToolCheck(); }
-function selectDefaultTools() { selectedTools = new Set(TOOLS.filter(t => t.def).map(t => t.id)); onToolCheck(); }
+function setAllTools(v) {
+  // 先同步 DOM checkbox，再统一读取（避免 onToolCheck 用旧 DOM 状态覆盖）
+  document.querySelectorAll('#toolList input[type=checkbox]').forEach(cb => cb.checked = v);
+  onToolCheck();
+}
+function selectDefaultTools() {
+  document.querySelectorAll('#toolList input[type=checkbox]').forEach(cb => {
+    const t = TOOLS.find(x => x.id === cb.value);
+    cb.checked = !!(t && t.def);
+  });
+  onToolCheck();
+}
 function updateToolBtnLabel() {
-  document.getElementById('toolBtnLabel').textContent = `${selectedTools.size} 个工具`;
+  const n = selectedTools.size;
+  document.getElementById('toolBtnLabel').textContent = `${n} 个工具`;
+  // 无工具时禁用扫描
+  const btn = document.getElementById('scanBtn');
+  if (btn) {
+    btn.disabled = n === 0;
+    btn.title = n === 0 ? '请至少选择一个扫描工具' : '';
+  }
 }
 
 /* ================= 时间范围 ================= */
@@ -712,6 +729,10 @@ document.getElementById('timeSeg').addEventListener('click', e => {
 
 /* ================= 扫描 ================= */
 async function loadSessions() {
+  if (selectedTools.size === 0) {
+    showToast('请至少选择一个扫描工具', 'error');
+    return;
+  }
   const tools = [...selectedTools].join(',');
   const q = getTimeParams();
   const qs = new URLSearchParams({ tools, ...q }).toString();
@@ -759,19 +780,20 @@ function renderSkeleton() {
 }
 
 /* ================= 搜索 / 排序 / 渲染 ================= */
-function applySearch() {
+function getFilteredSessions() {
   const q = document.getElementById('searchInput').value.trim().toLowerCase();
-  let filtered = allSessions;
-  if (q) {
-    filtered = allSessions.filter(s => {
-      const title = (s.session_title || s.first_message || '').toLowerCase();
-      const cwd = (s.cwd || s.cwd_human || '').toLowerCase();
-      const filename = (s.filename || '').toLowerCase();
-      const group = (s.session_group || s.dir || '').toLowerCase();
-      return title.includes(q) || cwd.includes(q) || filename.includes(q) || group.includes(q);
-    });
-  }
-  renderGroups(filtered, q);
+  if (!q) return allSessions;
+  return allSessions.filter(s => {
+    const title = (s.session_title || s.first_message || '').toLowerCase();
+    const cwd = (s.cwd || s.cwd_human || '').toLowerCase();
+    const filename = (s.filename || '').toLowerCase();
+    const group = (s.session_group || s.dir || '').toLowerCase();
+    return title.includes(q) || cwd.includes(q) || filename.includes(q) || group.includes(q);
+  });
+}
+
+function applySearch() {
+  renderGroups(getFilteredSessions(), document.getElementById('searchInput').value.trim().toLowerCase());
   updateStats();
 }
 function setSort(field) {
@@ -1088,8 +1110,7 @@ async function cleanupStaleIndex() {
 }
 
 async function exportCsv() {
-  const q = document.getElementById('searchInput').value.trim().toLowerCase();
-  const rows = q ? allSessions.filter(s => (s.session_title + s.first_message + s.filename + s.cwd + s.session_group + s.dir).toLowerCase().includes(q)) : allSessions;
+  const rows = getFilteredSessions();
   if (!rows.length) { showToast('没有可导出的数据', 'error'); return; }
   const esc = v => { v = (v || '').toString(); return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
   const header = ['工具', '文件名', '路径', '会话标题', '创建目录', '大小(字节)', '用户消息', '助手消息', '修改时间', '分组'];
@@ -1231,6 +1252,8 @@ function toggleExpand(btn) {
 function formatTimestamp(ts) {
   if (!ts) return '';
   try {
+    // 兼容秒级时间戳（10 位）与毫秒（13 位）
+    if (typeof ts === 'number' && ts < 1e12) ts = ts * 1000;
     const d = new Date(ts);
     if (isNaN(d.getTime())) return ts;
     return d.toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });

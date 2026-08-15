@@ -268,6 +268,7 @@ def find_hermes_sessions(from_ts=None, to_ts=None):
     if not HERMES_DB_PATH.exists():
         return []
     candidates = []
+    conn = None
     try:
         import sqlite3
         conn = sqlite3.connect(str(HERMES_DB_PATH))
@@ -318,9 +319,14 @@ def find_hermes_sessions(from_ts=None, to_ts=None):
                 "session_title": display_title,
                 "hermes_session_id": sid,
             })
-        conn.close()
     except Exception as e:
         print(f"读取 Hermes 数据库失败: {e}", file=sys.stderr)
+    finally:
+        if conn is not None:
+            try:
+                conn.close()
+            except Exception:
+                pass
     return candidates
 
 
@@ -355,7 +361,11 @@ def find_session_files(tool, from_ts=None, to_ts=None):
                 continue
             seen.add(str(f))
 
-            stat = f.stat()
+            # 竞态防御：扫描期间文件可能被删除/移动
+            try:
+                stat = f.stat()
+            except OSError:
+                continue
             mtime = stat.st_mtime
             if from_ts is not None and mtime < from_ts:
                 continue
@@ -1035,6 +1045,7 @@ def clean_codex_state_db():
     db_path = HOME / ".codex" / "state_5.sqlite"
     if not db_path.exists():
         return 0
+    conn = None
     try:
         import sqlite3
         conn = sqlite3.connect(str(db_path))
@@ -1043,7 +1054,6 @@ def clean_codex_state_db():
         rows = cursor.fetchall()
         stale_ids = [r[0] for r in rows if r[1] and not Path(r[1]).exists()]
         if not stale_ids:
-            conn.close()
             return 0
         # 批量清理相关表
         placeholders = ",".join("?" * len(stale_ids))
@@ -1052,18 +1062,24 @@ def clean_codex_state_db():
         cursor.execute(f"DELETE FROM agent_job_items WHERE assigned_thread_id IN ({placeholders})", stale_ids)
         cursor.execute(f"DELETE FROM threads WHERE id IN ({placeholders})", stale_ids)
         conn.commit()
-        conn.close()
         return len(stale_ids)
     except Exception as e:
         print(f"清理 Codex state 数据库失败: {e}", file=sys.stderr)
         return 0
+    finally:
+        if conn is not None:
+            try:
+                conn.close()
+            except Exception:
+                pass
 
 
 def clean_orca_state_db():
-    """清理 Orca 内嵌 Codex 的 state_5.sqlite 中失效 thread 记录"""
+    """清理 Orca state_5.sqlite 中指向已删除 rollout 文件的失效 thread 记录"""
     db_path = HOME / ".config" / "orca" / "codex-runtime-home" / "home" / "state_5.sqlite"
     if not db_path.exists():
         return 0
+    conn = None
     try:
         import sqlite3
         conn = sqlite3.connect(str(db_path))
@@ -1072,19 +1088,24 @@ def clean_orca_state_db():
         rows = cursor.fetchall()
         stale_ids = [r[0] for r in rows if r[1] and not Path(r[1]).exists()]
         if not stale_ids:
-            conn.close()
             return 0
+        # 批量清理相关表
         placeholders = ",".join("?" * len(stale_ids))
         cursor.execute(f"DELETE FROM thread_dynamic_tools WHERE thread_id IN ({placeholders})", stale_ids)
         cursor.execute(f"DELETE FROM thread_spawn_edges WHERE parent_thread_id IN ({placeholders}) OR child_thread_id IN ({placeholders})", stale_ids + stale_ids)
         cursor.execute(f"DELETE FROM agent_job_items WHERE assigned_thread_id IN ({placeholders})", stale_ids)
         cursor.execute(f"DELETE FROM threads WHERE id IN ({placeholders})", stale_ids)
         conn.commit()
-        conn.close()
         return len(stale_ids)
     except Exception as e:
         print(f"清理 Orca state 数据库失败: {e}", file=sys.stderr)
         return 0
+    finally:
+        if conn is not None:
+            try:
+                conn.close()
+            except Exception:
+                pass
 
 
 def delete_hermes_session(sid):
@@ -1114,6 +1135,16 @@ def delete_files(paths, mode="trash"):
     deleted = []
     trashed = []
     failed = []
+    # 类型防御：只接受字符串路径列表（防止 None/嵌套结构导致 500）
+    if not isinstance(paths, list):
+        return {"deleted": deleted, "trashed": trashed, "failed": [{"path": str(paths), "error": "请求参数格式错误：paths 必须是列表"}]}
+    clean_paths = []
+    for p in paths:
+        if isinstance(p, str):
+            clean_paths.append(p)
+        else:
+            failed.append({"path": str(p), "error": "请求参数格式错误：路径必须是字符串"})
+    paths = clean_paths
     for p_str in paths:
         if p_str.startswith("hermes://"):
             sid = p_str[9:]
@@ -1219,6 +1250,24 @@ def _dir_size(d):
     return total
 
 
+def _safe_trash_item_dir(item_id):
+    """校验回收站条目 id 并返回其目录。
+
+    只接受 TRASH_ROOT 的直接子目录名（不含路径分隔符 / 及 . ..），
+    防止路径穿越（如 item_id="../xxx" 把删除/恢复作用到回收站之外）。
+    非法时返回 None。
+    """
+    if not item_id or "/" in item_id or "\\" in item_id or item_id in (".", ".."):
+        return None
+    item_dir = TRASH_ROOT / item_id
+    try:
+        if item_dir.parent.resolve() != TRASH_ROOT.resolve():
+            return None
+    except Exception:
+        return None
+    return item_dir
+
+
 def list_trash_items():
     """列出回收站条目（只读 manifest，不计算体积）"""
     items = []
@@ -1258,21 +1307,27 @@ def list_trash_items():
 
 def restore_trash_item(item_id):
     """把回收站条目恢复到原路径。返回 (ok, error_msg)"""
-    item_dir = TRASH_ROOT / item_id
+    item_dir = _safe_trash_item_dir(item_id)
+    if item_dir is None:
+        return False, "非法的回收站条目"
     mf = item_dir / "manifest.json"
     data = item_dir / "data"
     if not mf.exists() or not data.exists():
         return False, "回收站条目不存在或数据缺失"
     try:
         manifest = json.loads(mf.read_text(encoding="utf-8"))
-        original = Path(manifest["original"])
+        original = manifest["original"]
     except Exception as e:
         return False, f"读取清单失败: {e}"
-    if original.exists():
-        return False, f"原路径已被占用: {original}"
+    # 防篡改：原路径必须在本机 HOME 内（manifest 可能被手工编辑）
+    original_p = safe_resolve(original)
+    if original_p is None:
+        return False, f"原路径不在 HOME 目录下，拒绝恢复: {original}"
+    if original_p.exists():
+        return False, f"原路径已被占用: {original_p}"
     try:
-        original.parent.mkdir(parents=True, exist_ok=True)
-        shutil.move(str(data), str(original))
+        original_p.parent.mkdir(parents=True, exist_ok=True)
+        shutil.move(str(data), str(original_p))
         if item_dir.exists():
             shutil.rmtree(item_dir, ignore_errors=True)
         return True, ""
@@ -1282,7 +1337,9 @@ def restore_trash_item(item_id):
 
 def delete_trash_item_permanent(item_id):
     """从回收站彻底删除（不可恢复）"""
-    item_dir = TRASH_ROOT / item_id
+    item_dir = _safe_trash_item_dir(item_id)
+    if item_dir is None:
+        return False, "非法的回收站条目"
     if not item_dir.exists():
         return False, "条目不存在"
     try:
@@ -1298,7 +1355,7 @@ def empty_trash():
         return 0
     count = 0
     for item_dir in TRASH_ROOT.iterdir():
-        if (item_dir / "manifest.json").exists():
+        if item_dir.is_dir() and (item_dir / "manifest.json").exists():
             try:
                 shutil.rmtree(item_dir)
                 count += 1
@@ -1481,6 +1538,23 @@ class Handler(BaseHTTPRequestHandler):
     def log_message(self, format, *args):
         pass
 
+    def _check_origin(self):
+        """基础 CSRF/DNS-rebinding 防护：
+        浏览器跨站页面（Origin 与 Host 不同）发起的请求一律拒绝。
+        无 Origin 头（curl / 本机脚本）放行。
+        """
+        origin = self.headers.get("Origin")
+        if origin:
+            host = self.headers.get("Host", "")
+            try:
+                from urllib.parse import urlparse as _up
+                if _up(origin).netloc != host:
+                    self._json_response({"error": "跨站请求被拒绝（Origin 不匹配）"}, 403)
+                    return False
+            except Exception:
+                pass
+        return True
+
     def _json_response(self, data, status=200):
         body = json.dumps(data, ensure_ascii=False).encode("utf-8")
         self.send_response(status)
@@ -1500,15 +1574,21 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def do_GET(self):
+        if not self._check_origin():
+            return
         parsed = urlparse(self.path)
         path = parsed.path
-        qs = parse_qs(parsed.query)
+        qs = parse_qs(parsed.query, keep_blank_values=True)
 
         if path == "/":
             self._html_response(_load_html_page())
         elif path == "/api/sessions":
-            tools = qs.get("tools", [""])[0].split(",") if qs.get("tools") else list(TOOL_SESSION_ROOTS.keys())
-            tools = [t.strip() for t in tools if t.strip()]
+            # 区分「无 tools 参数」与「tools 为空」：
+            # 无参数 = 默认全部工具；显式空值 = 用户清空了选择，返回 0 个
+            if "tools" in qs:
+                tools = [t.strip() for t in qs.get("tools", [""])[0].split(",") if t.strip()]
+            else:
+                tools = list(TOOL_SESSION_ROOTS.keys())
             # 时间范围过滤：from / to（YYYY-MM-DD），兼容旧 days 参数（N 天前起）
             from_ts = parse_date_arg(qs.get("from", [""])[0], end_of_day=False)
             to_ts = parse_date_arg(qs.get("to", [""])[0], end_of_day=True)
@@ -1533,10 +1613,16 @@ class Handler(BaseHTTPRequestHandler):
             })
         elif path == "/api/preview":
             p = qs.get("path", [""])[0]
+            if not p:
+                self._json_response({"error": "缺少 path 参数"}, 400)
+                return
             self._json_response(preview_full(p))
         elif path == "/api/open":
             # 在系统文件管理器中打开文件所在目录
             p = qs.get("path", [""])[0]
+            if not p:
+                self._json_response({"error": "缺少 path 参数"}, 400)
+                return
             target = safe_resolve(p)
             if not target or not target.exists():
                 self._json_response({"error": "路径不存在或不在 HOME 目录下"}, 400)
@@ -1558,17 +1644,20 @@ class Handler(BaseHTTPRequestHandler):
             self.send_error(404)
 
     def _json_body(self):
-        """读取 POST JSON body"""
+        """读取 POST JSON body，返回 dict（非法 JSON 时返回 {}）"""
         length = int(self.headers.get("Content-Length", 0))
         if length <= 0:
             return {}
         body = self.rfile.read(length).decode("utf-8")
         try:
-            return json.loads(body)
+            data = json.loads(body)
+            return data if isinstance(data, dict) else {}
         except Exception:
-            return {"raw": body}
+            return {}
 
     def do_POST(self):
+        if not self._check_origin():
+            return
         parsed = urlparse(self.path)
         if parsed.path == "/api/delete":
             data = self._json_body()
@@ -1599,9 +1688,12 @@ class Handler(BaseHTTPRequestHandler):
             self._json_response({"kimi_removed": kimi_removed, "codex_removed": codex_removed, "orca_removed": orca_removed})
         elif parsed.path == "/api/trash/restore":
             data = self._json_body()
-            ids = data.get("ids", [])
+            ids = data.get("ids", []) if isinstance(data.get("ids"), list) else []
             restored, failed = [], []
             for item_id in ids:
+                if not isinstance(item_id, str):
+                    failed.append({"id": item_id, "error": "非法参数"})
+                    continue
                 ok, err = restore_trash_item(item_id)
                 if ok:
                     restored.append(item_id)
@@ -1610,9 +1702,12 @@ class Handler(BaseHTTPRequestHandler):
             self._json_response({"restored": restored, "failed": failed})
         elif parsed.path == "/api/trash/delete":
             data = self._json_body()
-            ids = data.get("ids", [])
+            ids = data.get("ids", []) if isinstance(data.get("ids"), list) else []
             deleted, failed = [], []
             for item_id in ids:
+                if not isinstance(item_id, str):
+                    failed.append({"id": item_id, "error": "非法参数"})
+                    continue
                 ok, err = delete_trash_item_permanent(item_id)
                 if ok:
                     deleted.append(item_id)
