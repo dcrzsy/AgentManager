@@ -122,8 +122,37 @@ UNINSTALL_CMDS = {
     "pi": "npm uninstall -g @earendil-works/pi-coding-agent",
     "gemini": "npm uninstall -g @google/gemini-cli",
     "aider": "pip uninstall -y aider-chat",
-    "kimi": None, "orca": None, "hermes": None, "qwen": None,
+    "qwen": "npm uninstall -g @qwen-code/qwen-code",
+    "kimi": None, "orca": None, "hermes": None,
 }
+
+# 文件系统安装工具的白名单卸载路径（tool_id -> {paths: [(HOME 相对路径, 是否数据目录)], note}）
+UNINSTALL_FS = {
+    "kimi": {
+        "paths": [(".kimi-code", False)],
+        "note": "官方安装器目录（~/.kimi-code，含 CLI 与运行时）",
+    },
+    "hermes": {
+        "paths": [(".local/bin/hermes", False), (".hermes", True)],
+        "note": "命令行入口 + 数据目录（~/.hermes，含会话/认证/备份，5GB 级）",
+    },
+    "orca": {
+        "paths": [(".config/orca/linux-orca-cli-shim", False), (".local/bin/orca-ide", False), (".config/orca", True)],
+        "note": "桌面应用 CLI shim + 入口 + 配置目录（~/.config/orca）",
+        "dynamic": ["Applications", ".local/bin"],  # 在其中找 orca*.AppImage
+    },
+}
+
+def _find_appimage(basename_key, search_dirs):
+    """在搜索目录中找匹配的 AppImage（避免硬编码路径漂移）"""
+    for d in search_dirs:
+        p = HOME / d
+        if not p.is_dir():
+            continue
+        for f in sorted(p.iterdir(), reverse=True):
+            if f.is_file() and f.suffix == ".AppImage" and basename_key.lower() in f.name.lower():
+                return f
+    return None
 
 # 运行中的升级任务：tool -> {thread, proc, output(尾部), start, done, code}
 _upgrade_tasks = {}
@@ -721,6 +750,17 @@ def env_report():
             tools_out.append(inst)
             problems.extend(probs)
 
+    # 文件系统安装工具：注入卸载路径详情（前端确认弹窗展示）
+    for t in tools_out:
+        fs_spec = UNINSTALL_FS.get(t["id"])
+        if fs_spec:
+            fs_paths = [str(HOME / rel) for rel, _ in fs_spec["paths"]]
+            for sd in fs_spec.get("dynamic", []):
+                app = _find_appimage(t["id"], [sd])
+                if app:
+                    fs_paths.append(str(app))
+            t["uninstall_fs"] = {"note": fs_spec["note"], "paths": fs_paths}
+
     # pi 扩展完整性
     for path, desc in PI_EXT_CHECKS:
         if not path.exists():
@@ -778,7 +818,7 @@ def env_report():
                         if UPGRADE_CMDS.get(t["id"])
                         and ((t["installed"] and t.get("has_update")) or (not t["installed"] and t.get("has_install")))],
         "uninstallable": [t["id"] for t in tools_out
-                          if UNINSTALL_CMDS.get(t["id"]) and t["installed"]],
+                          if (UNINSTALL_CMDS.get(t["id"]) or UNINSTALL_FS.get(t["id"])) and t["installed"]],
         "admin": _is_admin(),
         "real_user_home": str(_real_user_home()),
         "permission_issues": _permission_issues()[0][:8],
@@ -898,6 +938,38 @@ def start_upgrade(tool_id):
 
     threading.Thread(target=worker, daemon=True).start()
     return {"ok": True, "tool": tool_id, "command": cmd}
+
+
+def _uninstall_fs(tool_id):
+    """文件系统安装工具卸载：白名单路径清理（路径安全校验 + 数据目录保护提示已在确认弹窗完成）"""
+    spec = UNINSTALL_FS.get(tool_id)
+    if not spec:
+        return "无卸载定义"
+    lines = []
+    paths = [(str(HOME / rel), is_data) for rel, is_data in spec["paths"]]
+    # 动态补充 AppImage（orca 等）
+    for sd in spec.get("dynamic", []):
+        app = _find_appimage(tool_id, [sd])
+        if app:
+            paths.append((str(app), False))
+    for target_s, is_data in paths:
+        target = Path(target_s)
+        try:
+            # 路径安全校验：必须在 HOME 内（白名单兜底）
+            if not str(target.resolve()).startswith(str(HOME.resolve())):
+                lines.append(f"⚠️ 跳过异常路径: {target}")
+                continue
+            if target.is_dir():
+                shutil.rmtree(target, ignore_errors=True)
+                lines.append(f"✓ 已删除目录 {target}" + ("（数据目录）" if is_data else ""))
+            elif target.is_file() or target.is_symlink():
+                target.unlink(missing_ok=True)
+                lines.append(f"✓ 已删除 {target}")
+            else:
+                lines.append(f"· 不存在，跳过 {target}")
+        except Exception as e:
+            lines.append(f"⚠️ 删除失败 {target}: {e}")
+    return "\n".join(lines)
 
 
 def _uninstall_npm_all_envs(pkg, tool_id):
@@ -1085,6 +1157,36 @@ def start_uninstall(tool_id):
 
         threading.Thread(target=worker, daemon=True).start()
         return {"ok": True, "tool": tool_id, "command": f"卸载 {pkg}（所有 node 环境）"}
+    if UNINSTALL_FS.get(tool_id):
+        # 文件系统安装工具：白名单路径清理 + 验证
+        with _upgrade_lock:
+            if tool_id in _upgrade_tasks and not _upgrade_tasks[tool_id].get("done"):
+                return {"ok": False, "error": "该工具已有任务在进行中"}
+        task = {"tool": tool_id, "start": time.time(), "output": "",
+                "done": False, "code": None, "type": "uninstall"}
+        with _upgrade_lock:
+            _upgrade_tasks[tool_id] = task
+
+        def worker_fs():
+            try:
+                out = _uninstall_fs(tool_id)
+                remain = _which_all(TOOLS.get(tool_id, {}).get("bin", [""])[0]) if TOOLS.get(tool_id, {}).get("bin") else []
+                if remain:
+                    task["code"] = 1
+                    out += f"\n⚠️ 卸载验证未通过：仍检测到 {remain[0]}"
+                else:
+                    task["code"] = 0
+                    out += "\n✓ 卸载验证通过：命令行入口已不存在"
+                task["output"] = out
+            except Exception as e:
+                task["code"] = -1
+                task["output"] = f"[执行异常] {e}"
+            task["done"] = True
+            _record_history(tool_id, f"uninstall {tool_id}（文件系统）", task.get("code"), htype="uninstall")
+
+        threading.Thread(target=worker_fs, daemon=True).start()
+        return {"ok": True, "tool": tool_id, "command": f"卸载 {tool_id}（文件系统清理）"}
+
     if not cmd:
         return {"ok": False, "error": "该工具不支持自动卸载，请走官方渠道"}
     with _upgrade_lock:
