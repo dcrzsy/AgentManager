@@ -115,6 +115,16 @@ TOOLS = {
 # 白名单升级命令（tool id -> cmd）；None 表示不支持自动升级
 UPGRADE_CMDS = {t: meta["upgrade_cmd"] for t, meta in TOOLS.items()}
 
+# 白名单卸载命令（tool id -> cmd）；None 表示需走官方渠道
+UNINSTALL_CMDS = {
+    "claude": "npm uninstall -g @anthropic-ai/claude-code",
+    "codex": "npm uninstall -g @openai/codex",
+    "pi": "npm uninstall -g @earendil-works/pi-coding-agent",
+    "gemini": "npm uninstall -g @google/gemini-cli",
+    "aider": "pip uninstall -y aider-chat",
+    "kimi": None, "orca": None, "hermes": None, "qwen": None,
+}
+
 # 运行中的升级任务：tool -> {thread, proc, output(尾部), start, done, code}
 _upgrade_tasks = {}
 _upgrade_lock = threading.Lock()
@@ -172,7 +182,7 @@ def upgrade_history(limit=20):
     return {"items": h.get("items", [])[:limit]}
 
 
-def _record_history(tool, command, code):
+def _record_history(tool, command, code, htype="upgrade"):
     h = _load_history()
     h.setdefault("items", [])
     h["items"].insert(0, {
@@ -181,6 +191,7 @@ def _record_history(tool, command, code):
         "command": command,
         "code": code,
         "ok": code == 0,
+        "type": htype,
         "at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
     })
     h["items"] = h["items"][:50]
@@ -627,6 +638,8 @@ def env_report():
         "upgradeable": [t["id"] for t in tools_out
                         if UPGRADE_CMDS.get(t["id"])
                         and ((t["installed"] and t.get("has_update")) or (not t["installed"] and t.get("has_install")))],
+        "uninstallable": [t["id"] for t in tools_out
+                          if UNINSTALL_CMDS.get(t["id"]) and t["installed"]],
     }
     return report
 
@@ -742,6 +755,154 @@ def start_upgrade(tool_id):
     return {"ok": True, "tool": tool_id, "command": cmd}
 
 
+def _uninstall_npm_all_envs(pkg, tool_id):
+    """从所有 node 环境彻底卸载 npm 包：主环境 npm uninstall + 其他环境文件清理 + bin 链接清理"""
+    global _env_scan_cache
+    lines = []
+    meta = TOOLS.get(tool_id, {})
+    bin_names = meta.get("bin", [])
+    envs = _node_envs()
+
+    # 1. 主环境用 npm uninstall（规范卸载，更新 npm 记录）
+    primary = _primary_npm()
+    try:
+        code, out = _run([primary, "uninstall", "-g", pkg], timeout=90)
+        lines.append(f"主环境卸载（{primary}）：" + (out.strip()[:200] or f"退出码 {code}"))
+    except Exception as e:
+        lines.append(f"主环境卸载异常：{e}")
+
+    # 2. 其他环境文件清理（nvm 其他版本 / hermes / 系统）
+    for name, e in envs.items():
+        nm = Path(e["dir"]) / "lib" / "node_modules"
+        if not nm.is_dir():
+            continue
+        targets = [nm / pkg]
+        if "/" in pkg:
+            scope, sub = pkg.split("/", 1)
+            targets.append(nm / scope / sub)
+        for t in targets:
+            try:
+                if t.exists():
+                    # 路径安全校验：必须在 node_modules 内
+                    if str(t.resolve()).startswith(str(nm.resolve())):
+                        shutil.rmtree(t, ignore_errors=True)
+                        lines.append(f"✓ 已清除 {name} 环境: {t}")
+                    else:
+                        lines.append(f"⚠️ 跳过异常路径: {t}")
+            except Exception as ex:
+                lines.append(f"⚠️ {name} 清理失败: {ex}")
+
+    # 3. bin 链接清理（各环境 bin/ 下指向该包的符号链接）
+    for name, e in envs.items():
+        bd = Path(e["dir"]) / "bin"
+        if not bd.is_dir():
+            continue
+        for f in bd.iterdir():
+            try:
+                if not f.is_symlink():
+                    continue
+                target = Path(f.resolve())
+                is_pkg = False
+                for b in bin_names:
+                    if b in f.name:
+                        is_pkg = True
+                        break
+                if is_pkg and any(str(target).startswith(str(Path(e["dir"]) / "lib" / "node_modules" / p) ) for p in [pkg]):
+                    f.unlink(missing_ok=True)
+                    lines.append(f"✓ 已清除 bin 链接: {f}")
+            except Exception:
+                pass
+        # 也清理 bin 目录下与工具同名但目标在包内的链接（如 claude -> ../lib/node_modules/@anthropic-ai/claude-code/...）
+        for f in bd.iterdir():
+            try:
+                if f.is_symlink() and bin_names and f.name in bin_names:
+                    tgt = str(Path(f.resolve()))
+                    if ("node_modules" in tgt and pkg.split("/")[-1] in tgt):
+                        f.unlink(missing_ok=True)
+                        lines.append(f"✓ 已清除 bin 链接: {f}")
+            except Exception:
+                pass
+
+    # 4. 验证：所有 bin 名在所有搜索路径中是否已无实例
+    _env_scan_cache = None  # 环境缓存失效
+    remain = []
+    for b in bin_names:
+        remain += _which_all(b)
+    if remain:
+        lines.append("⚠️ 卸载后仍有实例：" + "；".join(remain))
+    else:
+        lines.append("✓ 已验证：所有环境均已卸载干净")
+    return "\n".join(lines)
+
+
+def start_uninstall(tool_id):
+    """后台启动卸载任务（彻底卸载：所有 node 环境 + bin 链接 + 验证）"""
+    meta = TOOLS.get(tool_id)
+    pkg = meta.get("npm_pkg") if meta else None
+    cmd = UNINSTALL_CMDS.get(tool_id)
+    if pkg:
+        # npm 工具：跨环境彻底卸载
+        with _upgrade_lock:
+            if tool_id in _upgrade_tasks and not _upgrade_tasks[tool_id].get("done"):
+                return {"ok": False, "error": "该工具已有任务在进行中"}
+        task = {"tool": tool_id, "start": time.time(), "output": "",
+                "done": False, "code": None, "type": "uninstall"}
+        with _upgrade_lock:
+            _upgrade_tasks[tool_id] = task
+
+        def worker():
+            try:
+                out = _uninstall_npm_all_envs(pkg, tool_id)
+                task["code"] = 0
+                task["output"] = out
+            except Exception as e:
+                task["code"] = -1
+                task["output"] = f"[执行异常] {e}"
+            task["done"] = True
+            _record_history(tool_id, f"uninstall {pkg}（所有环境）", task.get("code"), htype="uninstall")
+
+        threading.Thread(target=worker, daemon=True).start()
+        return {"ok": True, "tool": tool_id, "command": f"卸载 {pkg}（所有 node 环境）"}
+    if not cmd:
+        return {"ok": False, "error": "该工具不支持自动卸载，请走官方渠道"}
+    with _upgrade_lock:
+        if tool_id in _upgrade_tasks and not _upgrade_tasks[tool_id].get("done"):
+            return {"ok": False, "error": "该工具已有任务在进行中"}
+    task = {"tool": tool_id, "start": time.time(), "output": "",
+            "done": False, "code": None, "type": "uninstall"}
+    with _upgrade_lock:
+        _upgrade_tasks[tool_id] = task
+
+    def worker2():
+        try:
+            proc = subprocess.Popen(
+                cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                text=True, errors="replace", bufsize=1,
+            )
+            chunks = []
+            total = 0
+            while True:
+                line = proc.stdout.readline()
+                if not line:
+                    break
+                chunks.append(line)
+                total += len(line)
+                if total > 20000:
+                    chunks = chunks[-200:]
+                    total = sum(len(c) for c in chunks)
+            proc.wait()
+            task["code"] = proc.returncode
+            task["output"] = "".join(chunks[-300:])
+        except Exception as e:
+            task["code"] = -1
+            task["output"] = f"[执行异常] {e}"
+        task["done"] = True
+        _record_history(tool_id, cmd, task.get("code"), htype="uninstall")
+
+    threading.Thread(target=worker2, daemon=True).start()
+    return {"ok": True, "tool": tool_id, "command": cmd}
+
+
 def upgrade_status(tool_id):
     with _upgrade_lock:
         task = _upgrade_tasks.get(tool_id)
@@ -752,6 +913,7 @@ def upgrade_status(tool_id):
         "running": not task["done"],
         "done": task["done"],
         "code": task["code"],
+        "type": task.get("type", "upgrade"),
         "output": task["output"][-8000:],
         "elapsed": round(time.time() - task["start"], 1) if task["done"] else round(time.time() - task["start"], 1),
     }

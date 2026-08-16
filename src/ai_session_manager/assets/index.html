@@ -163,6 +163,8 @@ body {
   transition: all .15s; white-space: nowrap;
 }
 .btn:hover { border-color: var(--primary); color: var(--primary); }
+.btn.danger { background: #d93848; color: #fff; }
+.btn.danger:hover { background: #b82333; }
 .btn:disabled { opacity: .45; cursor: not-allowed; }
 .btn.primary { background: var(--primary); border-color: var(--primary); color: #fff; font-weight: 600; }
 .btn.primary:hover { filter: brightness(1.1); color: #fff; }
@@ -2126,6 +2128,7 @@ function renderEnvTools(tools) {
         ${t.running ? '<span class="e-running">● 运行中</span>' : ''}
         <span class="spacer"></span>
         ${envCache.upgradeable.includes(t.id) ? `<button class="btn sm primary" onclick="openUpgrade('${t.id}')">⬆️ 升级</button>` : (t.npm_pkg ? '<span style="font-size:11px;color:var(--faint)">npm: ' + escapeHtml(t.npm_pkg) + '</span>' : '')}
+        ${envCache.uninstallable.includes(t.id) ? `<button class="btn sm danger" onclick="uninstallTool('${t.id}')" title="卸载 ${escapeHtml(t.name)}">🗑️ 卸载</button>` : ''}
       </div>
       <div class="env-bin">${bins}</div>
       ${t.config_dir ? `<div class="env-config">配置目录：${escapeHtml(t.config_dir.replace(HOME_DIR, '~'))}</div>` : ''}
@@ -2164,6 +2167,29 @@ async function openUpgrade(toolId) {
   } catch (e) {
     document.getElementById('upgradeCmdShown').textContent = '无法获取命令';
   }
+}
+
+async function uninstallTool(toolId) {
+  const t = envCache.tools.find(x => x.id === toolId);
+  const name = t ? t.name : toolId;
+  if (!confirm('确定要卸载 ' + name + ' 吗？\n\n该操作将从主环境（npm 全局）移除 ' + (t ? t.npm_pkg || '该包' : '该包') + '。\n\n⚠️ 此操作不可撤销！')) return;
+  const out = document.getElementById('envTools');
+  try {
+    const r = await api('/api/env/uninstall', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tool: toolId }) });
+    if (!r.ok) { alert('⚠️ ' + (r.error || '无法开始卸载')); return; }
+    // 轮询状态
+    const poll = setInterval(async () => {
+      try {
+        const st = await api('/api/env/upgrade-status?tool=' + toolId);
+        if (st.done) {
+          clearInterval(poll);
+          const okMsg = st.code === 0 ? '✅ ' + name + ' 已卸载' : '❌ ' + name + ' 卸载失败（退出码 ' + st.code + '）';
+          alert(okMsg + '\n\n' + (st.output || '').slice(-1200));
+          loadEnv();
+        }
+      } catch (e) {}
+    }, 1500);
+  } catch (e) { alert('❌ ' + e.message); }
 }
 
 async function runUpgrade(toolId) {
