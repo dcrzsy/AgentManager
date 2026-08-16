@@ -144,7 +144,7 @@ def _npm_latest(pkg):
         cached = _npm_view_cache.get(pkg)
         if cached and now - cached[1] < _NPM_VIEW_TTL:
             return cached[0]
-    code, out = _run(["npm", "view", pkg, "version"], timeout=8)
+    code, out = _run([_primary_npm(), "view", pkg, "version"], timeout=8)
     latest = None
     if code == 0 and out.strip():
         # 取最后一行含版本号的行（npm 可能输出 warning 行）
@@ -579,7 +579,7 @@ def _npm_global_version(pkg, use_cache=True):
             cached = _npm_gv_cache.get(pkg)
             if cached and now - cached[1] < _NPM_GV_TTL:
                 return cached[0]
-    code, out = _run(["npm", "ls", "-g", "--depth=0", pkg], timeout=12)
+    code, out = _run([_primary_npm(), "ls", "-g", "--depth=0", pkg], timeout=12)
     m = re.search(rf"{re.escape(pkg)}@([\d.]+)", out)
     gv = m.group(1) if m else None
     if use_cache:
@@ -593,8 +593,8 @@ def env_report():
     problems = []
     tools_out = []
 
-    sys_node = _run(["node", "--version"], timeout=5)[1].strip()
-    sys_npm = _run(["npm", "--version"], timeout=5)[1].strip()
+    sys_node = _run_with_bins(["node", "--version"], timeout=5)[1].strip()
+    sys_npm = _run_with_bins(["npm", "--version"], timeout=5)[1].strip()
     # Python 版本：优先 PATH 中的 python3/python（PyInstaller 打包环境下
     # sys.executable 指向应用自身，--version 会输出应用版本而非 Python 版本）
     sys_py = _run(["python3", "--version"], timeout=5)[1].strip()
