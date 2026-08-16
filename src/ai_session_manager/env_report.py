@@ -328,6 +328,101 @@ _NPM_GV_TTL = 60
 _npm_gv_lock = threading.Lock()
 
 
+_env_scan_cache = None
+
+
+def _node_envs():
+    """扫描所有 node 环境及其 npm 全局包版本（读 package.json，不跑 npm）。
+    返回 {环境名: {"dir": str, "pkgs": {包名: 版本}}}"""
+    global _env_scan_cache
+    if _env_scan_cache is not None:
+        return _env_scan_cache
+    envs = {}
+    nvm = HOME / ".nvm" / "versions" / "node"
+    if nvm.is_dir():
+        vers = sorted((d for d in nvm.iterdir() if d.is_dir()),
+                      key=lambda d: d.name, reverse=True)
+        if vers:
+            envs["nvm"] = str(vers[0])
+    hermes = HOME / ".hermes" / "node"
+    if hermes.is_dir():
+        envs["hermes"] = str(hermes)
+    sys_node = shutil.which("node")
+    if sys_node and not any(str(sys_node).startswith(d) for d in envs.values()):
+        envs["系统"] = str(Path(sys_node).parent.parent)
+
+    out = {}
+    for name, node_dir in envs.items():
+        nm = Path(node_dir) / "lib" / "node_modules"
+        pkgs = {}
+        if nm.is_dir():
+            for sub in nm.iterdir():
+                pf = sub / "package.json"
+                if pf.is_file():
+                    try:
+                        v = json.loads(pf.read_text(encoding="utf-8")).get("version")
+                        if v:
+                            pkgs[sub.name] = v
+                    except Exception:
+                        pass
+                elif sub.is_dir():  # @scope/pkg
+                    for sub2 in sub.iterdir():
+                        pf2 = sub2 / "package.json"
+                        if pf2.is_file():
+                            try:
+                                v = json.loads(pf2.read_text(encoding="utf-8")).get("version")
+                                if v:
+                                    pkgs[f"{sub.name}/{sub2.name}"] = v
+                            except Exception:
+                                pass
+        out[name] = {"dir": node_dir, "pkgs": pkgs}
+    _env_scan_cache = out
+    return out
+
+
+def _env_diagnostics():
+    """跨环境 npm 包版本诊断：
+    - 同一工具在多个 node 环境版本不一致 → 升级可能未同步
+    - PATH 中 npm 与主 npm 错位 → 升级装错环境风险"""
+    problems = []
+    envs = _node_envs()
+    if len(envs) < 2:
+        return problems
+    # 每对环境的公共包版本比较
+    names = list(envs.keys())
+    all_pkgs = set()
+    for e in envs.values():
+        all_pkgs.update(e["pkgs"].keys())
+    for pkg in sorted(all_pkgs):
+        vers = {n: envs[n]["pkgs"].get(pkg) for n in names}
+        have = {n: v for n, v in vers.items() if v}
+        if len(have) >= 2 and len(set(have.values())) > 1:
+            which = next((tid for tid, m in TOOLS.items() if m.get("npm_pkg") == pkg), None)
+            problems.append({
+                "tool": which or "system", "level": "warn",
+                "message": f"「{pkg}」在多个 node 环境版本不一致："
+                           + "；".join(f"{n}={v}" for n, v in have.items()),
+                "detail": "可能是升级只装到了一个环境（如 ~/.hermes/node 或 nvm）。"
+                          + ("升级现会统一使用主环境 npm，可重新检测后再次升级。" if which else ""),
+            })
+    # npm 错位：PATH 首个 npm vs 主 npm
+    path_npm = ""
+    for d in os.environ.get("PATH", "").split(os.pathsep):
+        if d:
+            p = Path(d) / "npm"
+            if p.is_file():
+                path_npm = str(p)
+                break
+    primary = _primary_npm()
+    if path_npm and primary != "npm" and path_npm != primary and Path(path_npm).exists():
+        problems.append({
+            "tool": "system", "level": "info",
+            "message": "当前环境 PATH 的 npm 与主环境 npm 不一致（升级错位风险已规避）",
+            "detail": f"PATH npm: {path_npm}；主环境 npm: {primary}。升级命令已统一使用主环境 npm。",
+        })
+    return problems
+
+
 def _primary_npm():
     """主环境 npm 全路径：优先 nvm（用户终端环境），其次已知目录中的 npm。
     避免从 orca/hermes 环境升级时装到 ~/.hermes/node 而主环境不生效"""
@@ -509,6 +604,9 @@ def env_report():
             "message": f"检测到 {len(node_paths)} 个 node 可执行文件（nvm 多版本常见，通常正常）",
             "detail": "；".join(node_paths),
         })
+
+    # 跨环境 npm 包版本诊断（升级错位检测）
+    problems.extend(_env_diagnostics())
 
     report = {
         "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
