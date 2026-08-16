@@ -325,7 +325,15 @@ def env_report():
 
     sys_node = _run(["node", "--version"], timeout=5)[1].strip()
     sys_npm = _run(["npm", "--version"], timeout=5)[1].strip()
-    sys_py = _run([sys.executable, "--version"], timeout=5)[1].strip() or _run(["python3", "--version"], timeout=5)[1].strip()
+    # Python 版本：优先 PATH 中的 python3/python（PyInstaller 打包环境下
+    # sys.executable 指向应用自身，--version 会输出应用版本而非 Python 版本）
+    sys_py = _run(["python3", "--version"], timeout=5)[1].strip()
+    if not sys_py or "Python" not in sys_py:
+        sys_py = _run(["python", "--version"], timeout=5)[1].strip()
+    if not sys_py or "Python" not in sys_py:
+        cand = _run([sys.executable, "--version"], timeout=5)[1].strip()
+        if cand.startswith("Python"):
+            sys_py = cand
 
     # npm registry（读 .npmrc，升级是否走镜像）
     npmrc = ""
