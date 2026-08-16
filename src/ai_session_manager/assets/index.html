@@ -477,14 +477,23 @@ tbody tr:hover .op-cell .op-preview, tr.selected .op-cell .op-preview { visibili
 .raw-event .event-type { font-size: 10.5px; color: var(--primary); background: var(--primary-soft); padding: 2px 8px; border-radius: 10px; margin-bottom: 8px; display: inline-block; font-family: var(--mono); }
 .raw-event pre { background: none; border: none; padding: 0; margin: 0; font-size: 11.5px; }
 .toast {
-  position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(20px);
-  padding: 10px 20px; border-radius: 10px; color: #fff; font-size: 13px; z-index: 200;
-  opacity: 0; transition: all .3s; box-shadow: var(--shadow-lg); max-width: 560px;
+  position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(16px) scale(.97);
+  display: flex; align-items: center; gap: 9px;
+  padding: 11px 20px; border-radius: 12px; color: #fff; font-size: 13px; font-weight: 500; z-index: 300;
+  opacity: 0; transition: all .28s cubic-bezier(.21,1.02,.73,1); box-shadow: 0 10px 30px rgba(0,0,0,.22);
+  max-width: 580px; border: 1px solid rgba(255,255,255,.16); backdrop-filter: blur(8px);
+  line-height: 1.5;
 }
-.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
-.toast.success { background: #19a974; }
-.toast.error { background: #e5484d; }
-.toast.info { background: #44506b; }
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); }
+.toast .t-ico { font-size: 16px; flex-shrink: 0; }
+.toast .t-msg { min-width: 0; }
+.toast.success { background: rgba(25,169,116,.95); }
+.toast.error { background: rgba(229,72,77,.95); }
+.toast.info { background: rgba(68,80,107,.95); }
+.toast.warn { background: rgba(217,119,6,.95); }
+/* 弹窗底部取消按钮辨识度 */
+.modal-footer .btn:not(.primary):not(.danger) { border-color: var(--border-strong); background: var(--card-2); }
+.modal-footer .btn:not(.primary):not(.danger):hover { border-color: var(--primary); color: var(--primary); background: var(--hover); }
 /* ===== 全局交互与动效（v2.1.20） ===== */
 /* 按钮按压反馈 + 加载 spinner */
 .btn { transition: all .15s, transform .06s ease; }
@@ -924,7 +933,9 @@ function lsSet(k, v) { try { localStorage.setItem('asm.' + k, v); } catch (e) {}
 /* ================= 通用工具 ================= */
 function showToast(msg, type = 'success') {
   const t = document.getElementById('toast');
-  t.textContent = msg; t.className = 'toast ' + type + ' show';
+  const ico = { success: '✅', error: '❌', info: 'ℹ️', warn: '⚠️' }[type] || 'ℹ️';
+  t.innerHTML = '<span class="t-ico">' + ico + '</span><span class="t-msg">' + escapeHtml(msg) + '</span>';
+  t.className = 'toast ' + type + ' show';
   clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove('show'), 3600);
 }
 async function api(path, opts = {}) {
@@ -2211,7 +2222,9 @@ function renderEnvTools(tools) {
           <span class="env-badge idle" title="${escapeHtml(t.install_method)}">${escapeHtml(t.install_method)}</span>
           <span class="spacer"></span>
           ${envCache.upgradeable.includes(t.id) ? `<button class="btn sm primary" onclick="openUpgrade('${t.id}')">⬆️ 升级</button>` : ''}
-          ${envCache.uninstallable.includes(t.id) ? `<button class="btn sm danger" onclick="uninstallTool('${t.id}')" title="卸载 ${escapeHtml(t.name)}">🗑️ 卸载</button>` : ''}
+          ${envCache.uninstallable.includes(t.id)
+            ? `<button class="btn sm danger" onclick="uninstallTool('${t.id}')" title="卸载 ${escapeHtml(t.name)}">🗑️ 卸载</button>`
+            : `<button class="btn sm" disabled title="${escapeHtml(t.install_method || '官方渠道')}管理，请通过官方渠道手动卸载" style="opacity:.5;cursor:not-allowed">🗑️ 卸载</button>`}
         </div>
       </div>`;
     }
@@ -2290,49 +2303,66 @@ async function openUpgrade(toolId) {
   }
 }
 
-async function uninstallTool(toolId) {
+function uninstallTool(toolId) {
   const t = envCache.tools.find(x => x.id === toolId);
   const name = t ? t.name : toolId;
-  if (!confirm('确定要卸载 ' + name + ' 吗？\n\n该操作将从主环境（npm 全局）移除 ' + (t ? t.npm_pkg || '该包' : '该包') + '。\n\n⚠️ 此操作不可撤销！')) return;
-  const out = document.getElementById('envTools');
+  confirmDialog({
+    title: '🗑️ 卸载 ' + name,
+    okText: '🗑️ 确认卸载',
+    html: '<p style="margin:0 0 6px">将卸载 <b>' + escapeHtml(name) + '</b>' + (t && t.npm_pkg ? '（<code style="font-family:var(--mono);font-size:12px">' + escapeHtml(t.npm_pkg) + '</code>）' : '') + '，从主环境（npm 全局 / pip）移除。</p>' +
+          '<p style="margin:0;color:var(--danger);font-size:12.5px">⚠️ 此操作不可撤销！</p>',
+    onOk: () => doUninstall(toolId),
+  });
+}
+async function doUninstall(toolId) {
+  const t = envCache.tools.find(x => x.id === toolId);
+  const name = t ? t.name : toolId;
   try {
     const r = await api('/api/env/uninstall', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tool: toolId }) });
-    if (!r.ok) { alert('⚠️ ' + (r.error || '无法开始卸载')); return; }
-    // 轮询状态
+    if (!r.ok) { showAlert('warn', '无法开始卸载', r.error || '未知错误'); return; }
+    showToast('正在卸载 ' + name + '…', 'info');
     const poll = setInterval(async () => {
       try {
         const st = await api('/api/env/upgrade-status?tool=' + toolId);
         if (st.done) {
           clearInterval(poll);
-          const okMsg = st.code === 0 ? '✅ ' + name + ' 已卸载' : '❌ ' + name + ' 卸载失败（退出码 ' + st.code + '）';
-          alert(okMsg + '\n\n' + (st.output || '').slice(-1200));
-          loadEnv();
+          if (st.code === 0) { showToast(name + ' 已卸载', 'success'); loadEnv(); }
+          else showAlert('error', name + ' 卸载失败', '退出码 ' + st.code, (st.output || '').slice(-1200));
         }
       } catch (e) {}
     }, 1500);
-  } catch (e) { alert('❌ ' + e.message); }
+  } catch (e) { showAlert('error', '卸载出错', e.message); }
 }
 
-async function fixReinstall(toolId) {
+function fixReinstall(toolId) {
   const t = envCache.tools.find(x => x.id === toolId);
   const name = t ? t.name : toolId;
-  if (!confirm('重新安装 ' + name + ' 以修复 CLI 损坏？\n\n将执行：npm install -g <pkg>@latest（含 --allow-scripts）')) return;
+  confirmDialog({
+    title: '🛠️ 重新安装 ' + name,
+    okText: '🛠️ 确认重装',
+    html: '<p style="margin:0 0 6px">重新安装以修复 CLI 损坏？</p>' +
+          '<p style="margin:0;color:var(--muted);font-size:12.5px">将执行 <code style="font-family:var(--mono);font-size:12px">npm install -g &lt;pkg&gt;@latest</code>（含 --allow-scripts）</p>',
+    onOk: () => doReinstall(toolId),
+  });
+}
+async function doReinstall(toolId) {
+  const t = envCache.tools.find(x => x.id === toolId);
+  const name = t ? t.name : toolId;
   try {
     const r = await api('/api/env/reinstall', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tool: toolId }) });
-    if (!r.ok) { alert('⚠️ ' + (r.error || '无法开始重装')); return; }
-    alert('⏳ 正在重装 ' + name + '...（完成后自动验证版本）');
+    if (!r.ok) { showAlert('warn', '无法开始重装', r.error || '未知错误'); return; }
+    showToast('正在重装 ' + name + '…', 'info');
     const poll = setInterval(async () => {
       try {
         const st = await api('/api/env/upgrade-status?tool=' + toolId);
         if (st.done) {
           clearInterval(poll);
-          const head = st.code === 0 ? '✅ ' + name + ' 重装完成' : '❌ ' + name + ' 重装失败（退出码 ' + st.code + '）';
-          alert(head + '\n\n' + (st.output || '').slice(-1500));
-          loadEnv();
+          if (st.code === 0) { showToast(name + ' 重装完成', 'success'); loadEnv(); }
+          else showAlert('error', name + ' 重装失败', '退出码 ' + st.code, (st.output || '').slice(-1500));
         }
       } catch (e) {}
     }, 1500);
-  } catch (e) { alert('❌ ' + e.message); }
+  } catch (e) { showAlert('error', '重装出错', e.message); }
 }
 
 async function runUpgrade(toolId) {
@@ -2392,6 +2422,15 @@ function openGeneric(title, bodyHtml, footerHtml = '') {
   document.getElementById('genericModal').classList.add('active');
 }
 function closeGeneric() { document.getElementById('genericModal').classList.remove('active'); }
+/* 统一结果弹窗：替代原生 alert（支持长输出滚动展示） */
+function showAlert(type, title, message, detail) {
+  const ico = { success: '✅', error: '❌', warn: '⚠️', info: 'ℹ️' }[type] || 'ℹ️';
+  const body = '<div style="font-size:13.5px;line-height:1.9">' +
+    '<p style="margin:0 0 6px">' + escapeHtml(message) + '</p>' +
+    (detail ? '<pre style="max-height:280px;overflow:auto;background:var(--card-2);border:1px solid var(--border);padding:10px 12px;border-radius:8px;font-family:var(--mono);font-size:12px;color:var(--muted);white-space:pre-wrap;line-height:1.6">' + escapeHtml(detail) + '</pre>' : '') +
+    '</div>';
+  openGeneric(ico + ' ' + title, body, '<button class="btn primary" onclick="closeGeneric()">知道了</button>');
+}
 
 /* ================= 初始化 ================= */
 renderToolPanel();
