@@ -42,6 +42,7 @@ TOOLS = {
         "name": "Pi",
         "bin": ["pi"],
         "version_args": ["--version"],
+        "version_exclude": ["CLN", "Written by"],  # /usr/bin/pi 是 GNU CLN 计算器，非 AI 工具
         "npm_pkg": "@earendil-works/pi-coding-agent",
         "config": [HOME / ".pi"],
         "upgrade_cmd": "npm install -g @earendil-works/pi-coding-agent@latest",
@@ -265,11 +266,38 @@ def _run(cmd, timeout=8, env=None):
         return -1, str(e)
 
 
+_extra_bin_dirs = None
+
+
+def _known_bin_dirs():
+    """PATH 之外的已知 bin 目录（nvm 全局 / 用户目录 / kimi / orca shim）。
+    从桌面/orca 等环境启动时 PATH 常缺 nvm，导致漏检 npm 全局工具"""
+    global _extra_bin_dirs
+    if _extra_bin_dirs is not None:
+        return _extra_bin_dirs
+    dirs = []
+    nvm = HOME / ".nvm" / "versions" / "node"
+    if nvm.is_dir():
+        vers = sorted((d for d in nvm.iterdir() if d.is_dir()),
+                      key=lambda d: d.name, reverse=True)
+        if vers:
+            dirs.append(str(vers[0] / "bin"))
+    for d in (HOME / ".local" / "bin",
+              HOME / ".kimi-code" / "bin",
+              HOME / ".config" / "orca" / "linux-orca-cli-shim",
+              HOME / ".npm-global" / "bin"):
+        if d.is_dir():
+            dirs.append(str(d))
+    _extra_bin_dirs = dirs
+    return dirs
+
+
 def _which_all(cmd):
-    """返回 PATH 中所有实例"""
+    """返回 PATH 及已知目录中的所有实例"""
     paths = []
     found = set()
-    for d in os.environ.get("PATH", "").split(os.pathsep):
+    dirs = [d for d in os.environ.get("PATH", "").split(os.pathsep) if d]
+    for d in dirs + _known_bin_dirs():
         p = Path(d) / cmd
         if p.is_file() and os.access(p, os.X_OK):
             key = str(p.resolve())
@@ -367,6 +395,7 @@ def env_report():
         versions = set()
         version_output_issues = []
         cli_safe = meta.get("cli_version_safe", True)
+        excl = meta.get("version_exclude", [])
         for b in meta["bin"]:
             for p in _which_all(b):
                 v = ""
@@ -378,6 +407,9 @@ def env_report():
                 else:
                     # 桌面应用：不执行 CLI（避免与主程序交互），从运行进程参数解析版本
                     v = _version_from_process(meta.get("run_proc", []))
+                # 无关同名二进制（如 GNU CLN 的 pi 计算器）排除
+                if excl and any(h in raw for h in excl):
+                    continue
                 if raw and not v:
                     version_output_issues.append(f"{p}: {raw}")
                 bins.append({"path": p, "version": v})
