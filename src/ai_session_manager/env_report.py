@@ -766,7 +766,7 @@ def env_report():
                           if UNINSTALL_CMDS.get(t["id"]) and t["installed"]],
         "admin": _is_admin(),
         "real_user_home": str(_real_user_home()),
-        "permission_issues": [i for i, _ in _permission_issues()][:8],
+        "permission_issues": _permission_issues()[0][:8],
     }
     return report
 
