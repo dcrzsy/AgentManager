@@ -2230,7 +2230,7 @@ function renderEnvTools(tools) {
         ${icoTag(t)}
         <div class="env-card-name" style="flex:1">
           <div class="env-name">${escapeHtml(t.name)}</div>
-          <div class="env-meta">${t.not_installed_latest ? 'npm 最新 ' + escapeHtml(t.not_installed_latest) : '未安装'}</div>
+          <div class="env-meta" title="${escapeHtml(t.install_method || '')}">${t.not_installed_latest ? 'npm 最新 ' + escapeHtml(t.not_installed_latest) : (t.install_method ? '未安装 · ' + escapeHtml(t.install_method) : '未安装')}</div>
         </div>
         ${envCache.upgradeable.includes(t.id) ? `<button class="btn sm primary" onclick="openUpgrade('${t.id}')">⬆️ 安装</button>` : ''}
       </div>`;

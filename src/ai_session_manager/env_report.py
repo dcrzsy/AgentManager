@@ -104,10 +104,10 @@ TOOLS = {
         "name": "Qwen Code",
         "bin": ["qwen-code", "qwen"],
         "version_args": ["--version"],
-        "npm_pkg": None,
+        "npm_pkg": "@qwen-code/qwen-code",
         "config": [HOME / ".qwen-code", HOME / ".qwen", HOME / ".cache" / "qwen-code"],
-        "upgrade_cmd": None,
-        "upgrade_via": "官方安装器",
+        "upgrade_cmd": "npm install -g @qwen-code/qwen-code@latest",
+        "upgrade_via": "npm 全局包 / 官方安装器",
         "run_proc": ["qwen-code", "qwen"],
     },
 }
@@ -704,11 +704,15 @@ def env_report():
                     "message": f"{meta['name']} 有可用更新：当前 {gv} → 最新 {latest}",
                     "detail": f"升级命令：{meta['upgrade_cmd']}",
                 })
-        # 未安装但 npm 包存在（如仅 npx 使用）
-        if not installed and meta["npm_pkg"]:
-            latest = _npm_latest(meta["npm_pkg"])
-            if latest:
-                inst["not_installed_latest"] = latest
+        # 未安装但可自动安装：npm 包存在，或有升级命令（pip/官方命令）
+        if not installed and (meta["npm_pkg"] or meta["upgrade_cmd"]):
+            if meta["npm_pkg"]:
+                latest = _npm_latest(meta["npm_pkg"])
+                if latest:
+                    inst["not_installed_latest"] = latest
+                    inst["has_install"] = True
+            elif meta["upgrade_cmd"]:
+                # pip 类工具：升级命令在未安装时即安装最新版
                 inst["has_install"] = True
         return inst, problems_i
 
