@@ -1810,7 +1810,8 @@ class Handler(BaseHTTPRequestHandler):
                 self._json_response({"ok": False, "error": "缺少 tool 参数"}, 400)
                 return
             r = env_mod.start_upgrade(data["tool"])
-            self._json_response(r, 200 if r.get("ok") else 400)
+            # 业务性拒绝（已最新/不支持/进行中）返回 200，便于前端直接展示 error 文案
+            self._json_response(r, 200)
         else:
             self.send_error(404)
 

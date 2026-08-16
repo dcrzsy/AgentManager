@@ -859,7 +859,7 @@ async function api(path, opts = {}) {
   if (!res.ok) {
     let detail = '';
     try { const d = await res.json(); if (d && d.error) detail = ': ' + d.error; } catch (e) {}
-    throw new Error('HTTP ' + res.status + detail);
+    throw new Error(detail ? detail.slice(2) : 'HTTP ' + res.status);
   }
   return res.json();
 }
@@ -2147,7 +2147,16 @@ async function openUpgrade(toolId) {
     const info = await api('/api/env/upgrade-info?tool=' + encodeURIComponent(toolId));
     document.getElementById('upgradeCmdShown').textContent = info.command || '官方渠道手动更新';
     document.getElementById('upgradeRunBtn').disabled = !info.supports_upgrade;
-    if (!info.supports_upgrade) document.getElementById('upgradeRunBtn').textContent = '不支持自动升级';
+    if (!info.supports_upgrade) {
+      document.getElementById('upgradeRunBtn').textContent = '不支持自动升级';
+      return;
+    }
+    // 已安装且已是最新：明确告知并禁用（旧页面/直接入口兜底）
+    if (t.installed && t.npm_latest_version && t.version === t.npm_latest_version) {
+      document.getElementById('upgradeCmdShown').textContent = '已是最新版本 ' + t.version;
+      document.getElementById('upgradeRunBtn').disabled = true;
+      document.getElementById('upgradeRunBtn').textContent = '已是最新';
+    }
   } catch (e) {
     document.getElementById('upgradeCmdShown').textContent = '无法获取命令';
   }
@@ -2159,7 +2168,12 @@ async function runUpgrade(toolId) {
   consoleEl.textContent = '启动升级…';
   try {
     const r = await api('/api/env/upgrade', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tool: toolId }) });
-    if (!r.ok) { consoleEl.textContent = '❌ ' + r.error; return; }
+    if (!r.ok) {
+      consoleEl.textContent = '⚠️ ' + (r.error || '无法开始升级');
+      document.getElementById('upgradeRunBtn').disabled = false;
+      document.getElementById('upgradeRunBtn').textContent = '重新尝试';
+      return;
+    }
     consoleEl.textContent = '⏳ 执行中…（输出实时滚动，完成后自动刷新状态）';
     // 轮询状态
     clearInterval(envUpgradeTimers[toolId]);
