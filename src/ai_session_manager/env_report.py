@@ -118,6 +118,24 @@ UPGRADE_CMDS = {t: meta["upgrade_cmd"] for t, meta in TOOLS.items()}
 _upgrade_tasks = {}
 _upgrade_lock = threading.Lock()
 
+# npm view 结果缓存（10 分钟内不重复联网查询）
+_npm_view_cache = {}
+_NPM_VIEW_TTL = 600
+
+
+def _npm_latest(pkg):
+    """npm 最新版本（联网，10 分钟缓存；失败返回 None）"""
+    if not pkg:
+        return None
+    now = time.time()
+    cached = _npm_view_cache.get(pkg)
+    if cached and now - cached[1] < _NPM_VIEW_TTL:
+        return cached[0]
+    code, out = _run(["npm", "view", pkg, "version"], timeout=8)
+    latest = out.strip().splitlines()[-1][:30] if code == 0 and out.strip() else None
+    _npm_view_cache[pkg] = (latest, now)
+    return latest
+
 UPGRADE_HISTORY_FILE = HOME / ".agent-manager" / "upgrade-history.json"
 
 
@@ -271,16 +289,6 @@ def _npm_global_version(pkg):
     return m.group(1) if m else None
 
 
-def _npm_latest(pkg):
-    """npm 最新版本（联网，失败返回 None）"""
-    if not pkg:
-        return None
-    code, out = _run(["npm", "view", pkg, "version"], timeout=10)
-    if code == 0 and out.strip():
-        return out.strip().splitlines()[-1][:30]
-    return None
-
-
 def env_report():
     """生成环境检测报告"""
     problems = []
@@ -372,7 +380,8 @@ def env_report():
             latest = _npm_latest(meta["npm_pkg"])
             inst["npm_global_version"] = gv
             inst["npm_latest_version"] = latest
-            if latest and gv and version_gt(latest, gv):
+            inst["has_update"] = bool(latest and gv and version_gt(latest, gv))
+            if inst["has_update"]:
                 problems.append({
                     "tool": tid, "level": "update",
                     "message": f"{meta['name']} 有可用更新：当前 {gv} → 最新 {latest}",
@@ -383,6 +392,7 @@ def env_report():
             latest = _npm_latest(meta["npm_pkg"])
             if latest:
                 inst["not_installed_latest"] = latest
+                inst["has_install"] = True
         tools_out.append(inst)
 
     # pi 扩展完整性
@@ -419,7 +429,9 @@ def env_report():
         "tools": tools_out,
         "problems": problems,
         "problem_count": len(problems),
-        "upgradeable": [t["id"] for t in tools_out if UPGRADE_CMDS.get(t["id"]) and t["installed"]],
+        "upgradeable": [t["id"] for t in tools_out
+                        if UPGRADE_CMDS.get(t["id"])
+                        and ((t["installed"] and t.get("has_update")) or (not t["installed"] and t.get("has_install")))],
     }
     return report
 
@@ -460,6 +472,15 @@ def start_upgrade(tool_id):
     cmd = UPGRADE_CMDS.get(tool_id)
     if not cmd:
         return {"ok": False, "error": "该工具不支持自动升级，请走官方渠道"}
+    # 已是最新则明确告知（避免"点了升级没变化"的困惑）
+    meta = TOOLS.get(tool_id)
+    if meta and meta.get("npm_pkg"):
+        gv = _npm_global_version(meta["npm_pkg"])
+        latest = _npm_latest(meta["npm_pkg"])
+        if gv and latest and not version_gt(latest, gv):
+            return {"ok": False, "error": f"已是最新版本 {gv}，无需升级"}
+        if not gv and latest:
+            pass  # 未安装场景：执行安装
     with _upgrade_lock:
         if tool_id in _upgrade_tasks and not _upgrade_tasks[tool_id].get("done"):
             return {"ok": False, "error": "升级已在进行中"}
