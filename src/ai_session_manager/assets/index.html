@@ -374,6 +374,34 @@ tbody tr:hover .op-cell .op-preview, tr.selected .op-cell .op-preview { visibili
 .tool-row .t-copy:hover { color: var(--primary); background: var(--primary-soft); }
 
 .env-tool-card { padding: 14px 16px; margin-bottom: 10px; }
+/* ===== 环境检测 · 网格布局（v2.1.20） ===== */
+.env-section-title { font-size: 12px; font-weight: 700; color: var(--faint); margin: 16px 2px 8px; letter-spacing: .04em; }
+.env-section-title:first-child { margin-top: 2px; }
+.env-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 12px; align-items: start; }
+.env-card { padding: 13px 15px; display: flex; flex-direction: column; gap: 10px; border: 1px solid var(--border); }
+.env-card:hover { border-color: var(--border-strong); }
+.env-card-head { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.env-ico { font-size: 21px; line-height: 1; flex-shrink: 0; width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; border-radius: 8px; background: var(--card-2); }
+.env-ico-img { flex-shrink: 0; width: 30px; height: 30px; border-radius: 8px; background: var(--card-2); padding: 3px; object-fit: contain; }
+.env-card-name { flex: 1; min-width: 0; }
+.env-name { font-weight: 700; font-size: 14px; display: flex; align-items: center; gap: 6px; }
+.env-meta { font-family: var(--mono); font-size: 10.5px; color: var(--faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.env-ver { font-family: var(--mono); font-size: 15px; font-weight: 700; color: var(--primary); flex-shrink: 0; }
+.env-card-foot { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.env-badge { font-size: 10.5px; padding: 2px 9px; border-radius: 10px; white-space: nowrap; }
+.env-badge.run { color: var(--ok); background: #e9fbf3; }
+[data-theme="dark"] .env-badge.run { background: #123528; }
+.env-badge.idle { color: var(--faint); background: var(--card-2); }
+.env-badge.multi { color: #e67e22; background: #fef5e7; }
+[data-theme="dark"] .env-badge.multi { background: #2d2410; }
+.env-card-foot .btn { margin-left: 0; }
+.env-grid .env-card-empty { grid-column: 1 / -1; }
+/* 未安装轻量卡 */
+.env-mini { padding: 11px 14px; display: flex; align-items: center; gap: 10px; min-width: 0; }
+.env-mini .env-ico { width: 28px; height: 28px; font-size: 17px; }
+.env-mini .env-name { font-size: 13px; }
+.env-mini .env-meta { flex: 1; }
+.env-mini .btn { flex-shrink: 0; }
 .env-tool-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .env-tool-head .e-name { font-weight: 700; font-size: 14.5px; }
 .env-tool-head .e-ver { font-family: var(--mono); font-size: 12.5px; color: var(--primary); background: var(--primary-soft); padding: 2px 10px; border-radius: 12px; }
@@ -455,6 +483,47 @@ tbody tr:hover .op-cell .op-preview, tr.selected .op-cell .op-preview { visibili
 }
 .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 .toast.success { background: #19a974; }
+.toast.error { background: #e5484d; }
+.toast.info { background: #44506b; }
+/* ===== 全局交互与动效（v2.1.20） ===== */
+/* 按钮按压反馈 + 加载 spinner */
+.btn { transition: all .15s, transform .06s ease; }
+.btn:active:not(:disabled) { transform: scale(.95); }
+.btn.sm:active:not(:disabled) { transform: scale(.92); }
+.btn.loading { pointer-events: none; opacity: .85; }
+.btn.loading::after { content: ''; display: inline-block; width: 11px; height: 11px; margin-left: 6px; vertical-align: -1px; border: 2px solid rgba(255,255,255,.35); border-top-color: #fff; border-radius: 50%; animation: spin .7s linear infinite; }
+.btn.ghost.loading::after { border-color: var(--border-strong); border-top-color: var(--primary); }
+@keyframes spin { to { transform: rotate(360deg); } }
+/* 导航项活动指示条（滑入动画） */
+.nav-item { position: relative; }
+.nav-item.active::before { content: ''; position: absolute; left: -8px; top: 50%; transform: translateY(-50%); width: 3px; height: 0; border-radius: 2px; background: var(--primary); animation: navBar .22s ease forwards; }
+@keyframes navBar { to { height: 18px; } }
+/* 列表/卡片悬浮上浮 */
+.s-row, .skill-card, .mcp-server, .env-card { transition: border-color .15s, box-shadow .2s, transform .2s; }
+.s-row:hover, .skill-card:hover, .mcp-server:hover, .env-card:hover { box-shadow: 0 4px 14px rgba(15,23,42,.09); }
+[data-theme="dark"] .s-row:hover, [data-theme="dark"] .skill-card:hover, [data-theme="dark"] .mcp-server:hover, [data-theme="dark"] .env-card:hover { box-shadow: 0 4px 14px rgba(0,0,0,.4); }
+/* 复选框与表单反馈 */
+input[type="checkbox"] { accent-color: var(--primary); cursor: pointer; transition: transform .1s; }
+input[type="checkbox"]:active { transform: scale(.8); }
+.btn:focus-visible, .nav-item:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+/* 滚动条美化 */
+::-webkit-scrollbar { width: 9px; height: 9px; }
+::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 5px; border: 2px solid transparent; background-clip: padding-box; }
+::-webkit-scrollbar-thumb:hover { background: var(--muted); background-clip: padding-box; }
+::-webkit-scrollbar-track { background: transparent; }
+/* 版本徽标：点击可复制，明确非链接 */
+.env-ver { background: var(--primary-soft); border: 1px solid color-mix(in srgb, var(--primary) 32%, transparent); padding: 1px 9px; border-radius: 10px; font-size: 13px; font-weight: 700; color: var(--primary); cursor: pointer; transition: transform .12s, filter .12s; flex-shrink: 0; }
+.env-ver:hover { filter: brightness(1.1); transform: scale(1.06); }
+.env-ver:active { transform: scale(.94); }
+/* 环境统计占位卡（补满网格最后一行） */
+.env-card:not(.env-mini) { min-height: 104px; }
+.env-card-placeholder { border-style: dashed; border-color: var(--muted); opacity: .92; background: color-mix(in srgb, var(--card-2) 55%, transparent); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; padding: 18px; text-align: center; min-height: 96px; }
+.env-card-placeholder:hover { box-shadow: none; }
+.env-card-placeholder .p-ico { font-size: 24px; opacity: .55; }
+.env-card-placeholder .p-title { font-size: 13px; font-weight: 700; color: var(--muted); }
+.env-card-placeholder .p-sub { font-size: 11px; color: var(--faint); line-height: 1.6; }
+/* 未安装卡左对齐统一 */
+.env-mini { justify-content: flex-start; }
 .toast.error { background: #e5484d; }
 .toast.info { background: #44506b; }
 
@@ -1003,6 +1072,8 @@ async function loadSessions() {
   const qs = new URLSearchParams({ tools: [...selectedTools].join(','), ...getTimeParams() }).toString();
   renderSkeleton();
   setStatus('扫描中…');
+  const scanBtn = document.getElementById('scanBtn');
+  if (scanBtn) { scanBtn.disabled = true; scanBtn.classList.add('loading'); }
   try {
     const t0 = performance.now();
     const data = await api('/api/sessions?' + qs);
@@ -1016,6 +1087,8 @@ async function loadSessions() {
     document.getElementById('content').innerHTML = `<div class="empty-state"><div class="e-ico">⚠️</div><div class="e-title">加载失败</div><div class="e-hint">${escapeHtml(e.message)}</div></div>`;
     setStatus('加载失败');
     showToast('加载失败: ' + e.message, 'error');
+  } finally {
+    if (scanBtn) { scanBtn.disabled = false; scanBtn.classList.remove('loading'); }
   }
   renderToolCounts();
   refreshTrashCount();
@@ -2058,7 +2131,7 @@ let envUpgradeTimers = {};
 
 async function loadEnv(force) {
   const scanBtn = document.getElementById('envScanBtn');
-  if (scanBtn) { scanBtn.disabled = true; scanBtn.textContent = '⏳ 检测中…'; }
+  if (scanBtn) { scanBtn.disabled = true; scanBtn.textContent = '检测中'; scanBtn.classList.add('loading'); }
   document.getElementById('envTools').innerHTML = '<div class="card skeleton">' + Array.from({ length: 4 }, () =>
     '<div class="sk-row"><div class="sk" style="flex:1"></div><div class="sk" style="flex:2"></div><div class="sk" style="width:100px"></div></div>').join('') + '</div>';
   try {
@@ -2085,7 +2158,7 @@ async function loadEnv(force) {
   } catch (e) {
     document.getElementById('envTools').innerHTML = '<div class="empty-state"><div class="e-title">检测失败</div><div class="e-hint">' + escapeHtml(e.message) + '</div></div>';
   } finally {
-    if (scanBtn) { scanBtn.disabled = false; scanBtn.textContent = '🔄 重新检测'; }
+    if (scanBtn) { scanBtn.disabled = false; scanBtn.textContent = '🔄 重新检测'; scanBtn.classList.remove('loading'); }
   }
 }
 
@@ -2110,41 +2183,78 @@ function renderEnvProblems(problems) {
 
 function renderEnvTools(tools) {
   const el = document.getElementById('envTools');
+  const TOOL_ICO = { claude:'/logos/claude.png', codex:'/logos/codex.png', pi:'/logos/pi.png', kimi:'/logos/kimi.png', orca:'/logos/orca.png', hermes:'/logos/hermes.png', aider:'/logos/aider.png', gemini:'/logos/gemini.png', qwen:'/logos/qwen.png' };
+  const icoTag = t => TOOL_ICO[t.id] ? `<img class="env-ico-img" src="${TOOL_ICO[t.id]}" alt="" onerror="this.style.display='none'">` : '<span class="env-ico">🧩</span>';
+  const installed = tools.filter(t => t.installed);
+  const notInstalled = tools.filter(t => !t.installed);
   let html = '';
-  for (const t of tools) {
-    if (!t.installed) {
-      html += `<div class="card env-tool-card">
-        <div class="env-tool-head">
-          <span class="e-name">${escapeHtml(t.name)}</span>
-          <span class="e-method">未安装</span>
-          ${t.not_installed_latest ? `<span class="e-ver" style="background:var(--card-2);color:var(--muted)">npm 最新 ${escapeHtml(t.not_installed_latest)}</span>` : ''}
-          ${envCache.upgradeable.includes(t.id) ? `<button class="btn sm primary" onclick="openUpgrade('${t.id}')">⬆️ 安装/升级</button>` : ''}
+
+  if (installed.length) {
+    html += '<div class="env-section-title">已安装工具</div><div class="env-grid">';
+    for (const t of installed) {
+      const ver = escapeHtml(t.version || '版本未知');
+      const primary = (t.bins && t.bins[0]) ? t.bins[0].path : '';
+      const extra = (t.bins && t.bins.length > 1) ? t.bins.length - 1 : 0;
+      const adminTip = envCache.admin && t.npm_pkg ? '<span style="font-size:10px;color:var(--warn)" title="管理员模式下升级/卸载可能改变文件属主，建议普通模式操作">⚠️ 普通模式</span>' : '';
+      html += `<div class="card env-card">
+        <div class="env-card-head">
+          ${icoTag(t)}
+          <div class="env-card-name">
+            <div class="env-name">${escapeHtml(t.name)} ${adminTip}</div>
+            <div class="env-meta" title="${escapeHtml(primary)}">${escapeHtml(primary.replace(HOME_DIR, '~') || '')}</div>
+          </div>
+          <span class="env-ver" title="点击复制版本号" onclick="copyVersion('${escapeHtml(t.version || '')}','${escapeHtml(t.name)}')">${ver}</span>
         </div>
-        ${t.config_dir ? `<div class="env-config">配置目录：${escapeHtml(t.config_dir.replace(HOME_DIR, '~'))}</div>` : ''}
+        <div class="env-card-foot">
+          <span class="env-badge ${t.running ? 'run' : 'idle'}">${t.running ? '● 运行中' : '○ 未运行'}</span>
+          ${extra ? `<span class="env-badge multi" title="${escapeHtml((t.bins||[]).slice(1).map(b=>b.path).join('；'))}">${extra + 1} 实例</span>` : ''}
+          <span class="env-badge idle" title="${escapeHtml(t.install_method)}">${escapeHtml(t.install_method)}</span>
+          <span class="spacer"></span>
+          ${envCache.upgradeable.includes(t.id) ? `<button class="btn sm primary" onclick="openUpgrade('${t.id}')">⬆️ 升级</button>` : ''}
+          ${envCache.uninstallable.includes(t.id) ? `<button class="btn sm danger" onclick="uninstallTool('${t.id}')" title="卸载 ${escapeHtml(t.name)}">🗑️ 卸载</button>` : ''}
+        </div>
       </div>`;
-      continue;
     }
-    const bins = (t.bins || []).map((b, i) => `
-      <span class="b-path">${escapeHtml(b.path)}${t.multiple_install ? '<span class="dup">（实例 ' + (i + 1) + '）</span>' : ''}</span>
-      <span class="b-ver">${escapeHtml(b.version || '版本未知')}</span>`).join('<span style="color:var(--border)">|</span>');
-    html += `<div class="card env-tool-card">
-      <div class="env-tool-head">
-        <span class="e-name">${escapeHtml(t.name)}</span>
-        <span class="e-ver">${escapeHtml(t.version || '版本未知')}</span>
-        <span class="e-method">${escapeHtml(t.install_method)}</span>
-        ${t.multiple_install ? '<span class="e-method" style="color:var(--warn);border-color:var(--warn)">多实例</span>' : ''}
-        ${t.running ? '<span class="e-running">● 运行中</span>' : ''}
-        <span class="spacer"></span>
-        ${envCache.upgradeable.includes(t.id) ? `<button class="btn sm primary" onclick="openUpgrade('${t.id}')">⬆️ 升级</button>` : (t.npm_pkg ? '<span style="font-size:11px;color:var(--faint)">npm: ' + escapeHtml(t.npm_pkg) + '</span>' : '')}
-        ${envCache.uninstallable.includes(t.id) ? `<button class="btn sm danger" onclick="uninstallTool('${t.id}')" title="卸载 ${escapeHtml(t.name)}">🗑️ 卸载</button>` : ''}
-        ${envCache.admin && t.npm_pkg ? `<span style="font-size:10.5px;color:var(--warn)" title="管理员模式下升级/卸载可能改变文件属主，建议普通模式操作">⚠️ 建议普通模式</span>` : ''}
-      </div>
-      <div class="env-bin">${bins}</div>
-      ${t.config_dir ? `<div class="env-config">配置目录：${escapeHtml(t.config_dir.replace(HOME_DIR, '~'))}</div>` : ''}
+    html += `<div class="card env-card env-card-placeholder">
+      <span class="p-ico">📦</span>
+      <div class="p-title">${installed.length} 个已安装 · ${notInstalled.length} 个未安装</div>
+      <div class="p-sub">点击版本号可复制<br>日常升级/卸载建议在普通模式进行</div>
     </div>`;
+    html += '</div>';
   }
+
+  if (notInstalled.length) {
+    html += '<div class="env-section-title">未安装</div><div class="env-grid">';
+    for (const t of notInstalled) {
+      html += `<div class="card env-card env-mini">
+        ${icoTag(t)}
+        <div class="env-card-name" style="flex:1">
+          <div class="env-name">${escapeHtml(t.name)}</div>
+          <div class="env-meta">${t.not_installed_latest ? 'npm 最新 ' + escapeHtml(t.not_installed_latest) : '未安装'}</div>
+        </div>
+        ${envCache.upgradeable.includes(t.id) ? `<button class="btn sm primary" onclick="openUpgrade('${t.id}')">⬆️ 安装</button>` : ''}
+      </div>`;
+    }
+    html += '</div>';
+  }
+
   el.innerHTML = html || '<div class="empty-state"><div class="e-title">无可检测工具</div></div>';
 }
+function copyVersion(v, name) {
+  if (!v || v === '版本未知' || v.startsWith('未知')) { showToast('该工具暂无版本号可复制', 'info'); return; }
+  const done = () => showToast(`${name} 版本 ${v} 已复制`, 'success');
+  const fallback = () => {
+    const ta = document.createElement('textarea');
+    ta.value = v; ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta); ta.select();
+    try { document.execCommand('copy'); ta.remove(); done(); }
+    catch (e) { ta.remove(); showToast('复制失败，请手动选择复制', 'error'); }
+  };
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(v).then(done, fallback);
+  } else fallback();
+}
+
 
 async function openUpgrade(toolId) {
   const t = (envCache.tools.find(x => x.id === toolId) || {});

@@ -1562,6 +1562,31 @@ class Handler(BaseHTTPRequestHandler):
                 pass
         return True
 
+    def _serve_logo(self, fname):
+        """服务官网 logo 图片（包内 assets/logos，支持 PyInstaller 打包）"""
+        import re as _re
+        if not _re.fullmatch(r"[A-Za-z0-9._-]+", fname):
+            self.send_error(400)
+            return
+        candidates = []
+        if getattr(sys, "_MEIPASS", None):
+            candidates.append(Path(sys._MEIPASS) / "ai_session_manager" / "assets" / "logos" / fname)
+            candidates.append(Path(sys._MEIPASS) / "_internal" / "ai_session_manager" / "assets" / "logos" / fname)
+        candidates.append(Path(__file__).parent / "assets" / "logos" / fname)
+        for c in candidates:
+            if c.is_file():
+                try:
+                    self.send_response(200)
+                    self.send_header("Content-Type", "image/png")
+                    self.send_header("Content-Length", str(c.stat().st_size))
+                    self.send_header("Cache-Control", "public, max-age=86400")
+                    self.end_headers()
+                    self.wfile.write(c.read_bytes())
+                    return
+                except Exception:
+                    pass
+        self.send_error(404)
+
     def _json_response(self, data, status=200):
         body = json.dumps(data, ensure_ascii=False).encode("utf-8")
         self.send_response(status)
@@ -1689,6 +1714,8 @@ class Handler(BaseHTTPRequestHandler):
             self._json_response(mcp_mod.mcp_raw(qs.get("source", ["pi"])[0]))
         elif path == "/api/env/report":
             self._json_response(env_mod.env_report())
+        elif path.startswith("/logos/"):
+            self._serve_logo(path[len("/logos/"):])
         elif path == "/api/env/upgrade-status":
             self._json_response(env_mod.upgrade_status(qs.get("tool", [""])[0]))
         elif path == "/api/env/upgrade-history":
