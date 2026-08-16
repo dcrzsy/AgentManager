@@ -2258,16 +2258,18 @@ function copyVersion(v, name) {
 
 async function openUpgrade(toolId) {
   const t = (envCache.tools.find(x => x.id === toolId) || {});
+  const isInstall = !t.installed;
+  const action = isInstall ? '安装' : '升级';
   const body = `
     <div style="font-size:13.5px;line-height:1.9">
-      <p>将执行升级命令<code id="upgradeCmdShown" style="font-family:var(--mono);background:var(--card-2);padding:2px 8px;border-radius:6px">查询中…</code></p>
-      <p style="color:var(--muted);font-size:12.5px">升级 <b>${escapeHtml(t.name || toolId)}</b>（当前 ${escapeHtml(t.version || '未知')}）。执行期间不要关闭本页面；完成后可在此查看输出。</p>
+      <p>将执行${action}命令<code id="upgradeCmdShown" style="font-family:var(--mono);background:var(--card-2);padding:2px 8px;border-radius:6px">查询中…</code></p>
+      <p style="color:var(--muted);font-size:12.5px">${action} <b>${escapeHtml(t.name || toolId)}</b>（${isInstall ? '未安装' : '当前 ' + escapeHtml(t.version || '未知')}）。执行期间不要关闭本页面；完成后可在此查看输出。</p>
       <div class="upgrade-console" id="upgradeConsole">准备中…</div>
     </div>`;
   const footer = `
     <button class="btn" onclick="closeGeneric()">关闭</button>
-    <button class="btn primary" id="upgradeRunBtn" onclick="runUpgrade('${toolId}')">⬆️ 开始升级</button>`;
-  openGeneric('⬆️ 升级 ' + (t.name || toolId), body, footer);
+    <button class="btn primary" id="upgradeRunBtn" onclick="runUpgrade('${toolId}')">⬆️ 开始${action}</button>`;
+  openGeneric('⬆️ ' + action + ' ' + (t.name || toolId), body, footer);
   // 命令以后端白名单为准（避免前端硬编码与后端不一致）
   try {
     const info = await api('/api/env/upgrade-info?tool=' + encodeURIComponent(toolId));
@@ -2340,7 +2342,7 @@ async function runUpgrade(toolId) {
   try {
     const r = await api('/api/env/upgrade', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tool: toolId }) });
     if (!r.ok) {
-      consoleEl.textContent = '⚠️ ' + (r.error || '无法开始升级');
+      consoleEl.textContent = '⚠️ ' + (r.error || '无法开始操作');
       document.getElementById('upgradeRunBtn').disabled = false;
       document.getElementById('upgradeRunBtn').textContent = '重新尝试';
       return;

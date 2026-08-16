@@ -844,9 +844,12 @@ def start_upgrade(tool_id):
 
     def worker():
         try:
+            # 增强 PATH：管理员(root)模式下 PATH 常缺 node/npm，npm 脚本 shebang 找不到 node
+            penv = os.environ.copy()
+            penv["PATH"] = os.pathsep.join(_known_bin_dirs() + [penv.get("PATH", "")])
             proc = subprocess.Popen(
                 cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                text=True, errors="replace", bufsize=1,
+                text=True, errors="replace", bufsize=1, env=penv,
             )
             chunks = []
             total = 0
