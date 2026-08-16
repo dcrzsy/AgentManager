@@ -3,6 +3,7 @@
 检测各 AI 工具：安装方式 / 版本 / 多版本冲突 / 运行状态 / 配置目录，支持白名单命令升级。
 """
 
+import json
 import os
 import re
 import shutil
@@ -116,11 +117,82 @@ UPGRADE_CMDS = {t: meta["upgrade_cmd"] for t, meta in TOOLS.items()}
 _upgrade_tasks = {}
 _upgrade_lock = threading.Lock()
 
+UPGRADE_HISTORY_FILE = HOME / ".agent-manager" / "upgrade-history.json"
+
+
+def _load_history():
+    try:
+        if UPGRADE_HISTORY_FILE.is_file():
+            return json.loads(UPGRADE_HISTORY_FILE.read_text(encoding="utf-8"))
+    except Exception:
+        pass
+    return {"items": []}
+
+
+def _save_history(items):
+    try:
+        UPGRADE_HISTORY_FILE.parent.mkdir(parents=True, exist_ok=True)
+        UPGRADE_HISTORY_FILE.write_text(json.dumps(items, ensure_ascii=False, indent=2), encoding="utf-8")
+    except Exception:
+        pass
+
+
+def upgrade_history(limit=20):
+    h = _load_history()
+    return {"items": h.get("items", [])[:limit]}
+
+
+def _record_history(tool, command, code):
+    h = _load_history()
+    h.setdefault("items", [])
+    h["items"].insert(0, {
+        "tool": tool,
+        "tool_name": TOOLS.get(tool, {}).get("name", tool),
+        "command": command,
+        "code": code,
+        "ok": code == 0,
+        "at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+    })
+    h["items"] = h["items"][:50]
+    _save_history(h)
+
 # pi 扩展完整性关键文件（已知故障点）
 PI_EXT_CHECKS = [
     (HOME / ".pi" / "agent" / "npm" / "node_modules" / "@hypabolic" / "hypa-linux-x64" / "bin" / "hypa", "hypa Linux 平台二进制（@hypabolic/pi-hypa 运行依赖）"),
     (HOME / ".pi" / "agent" / "npm" / "node_modules", "pi 扩展依赖目录 node_modules"),
 ]
+
+
+def _human_size(n):
+    for unit in ["B", "KB", "MB", "GB", "TB"]:
+        if n < 1024:
+            return f"{n:.1f} {unit}"
+        n /= 1024
+    return f"{n:.1f} PB"
+
+
+def _version_tuple(v):
+    """解析版本号为可比较元组（处理 0.9 vs 0.10、v 前缀、字母后缀）"""
+    if not v:
+        return (0,)
+    v = str(v).strip().lstrip("vV")
+    nums = []
+    for part in re.split(r"[.\-+]", v):
+        m = re.match(r"^(\d+)", part or "")
+        if m:
+            nums.append(int(m.group(1)))
+        else:
+            break
+    return tuple(nums) if nums else (0,)
+
+
+def version_gt(a, b):
+    """语义化版本比较：a > b ?"""
+    ta, tb = _version_tuple(a), _version_tuple(b)
+    for x, y in zip(ta, tb):
+        if x != y:
+            return x > y
+    return len(ta) > len(tb)
 
 
 def _run(cmd, timeout=8, env=None):
@@ -186,6 +258,26 @@ def env_report():
     sys_npm = _run(["npm", "--version"], timeout=5)[1].strip()
     sys_py = _run([sys.executable, "--version"], timeout=5)[1].strip() or _run(["python3", "--version"], timeout=5)[1].strip()
 
+    # npm registry（读 .npmrc，升级是否走镜像）
+    npmrc = ""
+    for rc in [HOME / ".npmrc", HOME / ".config" / "npm" / ".npmrc"]:
+        if rc.is_file():
+            try:
+                for line in rc.read_text(encoding="utf-8", errors="replace").splitlines():
+                    if line.strip().startswith("registry="):
+                        npmrc = line.strip().split("=", 1)[1].strip()
+                        break
+            except Exception:
+                pass
+            if npmrc:
+                break
+    proxy = {k: v for k, v in os.environ.items() if k.upper() in ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY")}
+    try:
+        disk = shutil.disk_usage(str(HOME))
+        disk_free = disk.free
+    except Exception:
+        disk_free = None
+
     for tid, meta in TOOLS.items():
         inst = {"id": tid, "name": meta["name"], "installed": False}
 
@@ -231,7 +323,7 @@ def env_report():
             latest = _npm_latest(meta["npm_pkg"])
             inst["npm_global_version"] = gv
             inst["npm_latest_version"] = latest
-            if latest and gv and latest != gv:
+            if latest and gv and version_gt(latest, gv):
                 problems.append({
                     "tool": tid, "level": "update",
                     "message": f"{meta['name']} 有可用更新：当前 {gv} → 最新 {latest}",
@@ -270,6 +362,10 @@ def env_report():
             "node": sys_node or "未安装",
             "npm": sys_npm or "未安装",
             "python": sys_py or "未安装",
+            "npm_registry": npmrc or "npm 官方源",
+            "proxy": proxy or {},
+            "disk_free": disk_free,
+            "disk_free_human": _human_size(disk_free) if disk_free is not None else "未知",
         },
         "tools": tools_out,
         "problems": problems,
@@ -292,6 +388,22 @@ def _install_method(tid, bins):
     if ".local/bin" in p or "/home/" in p:
         return "用户目录"
     return "系统目录"
+
+
+def upgrade_info(tool_id):
+    """返回某工具的升级命令信息（后端白名单为准，前端仅展示）"""
+    meta = TOOLS.get(tool_id)
+    if not meta:
+        return {"error": "未知工具"}
+    cmd = UPGRADE_CMDS.get(tool_id)
+    return {
+        "tool": tool_id,
+        "tool_name": meta["name"],
+        "command": cmd,
+        "via": meta.get("upgrade_via", ""),
+        "supports_upgrade": bool(cmd),
+        "npm_pkg": meta.get("npm_pkg"),
+    }
 
 
 def start_upgrade(tool_id):
@@ -332,6 +444,7 @@ def start_upgrade(tool_id):
             chunks.append(f"\n[执行异常] {e}")
         task["output"] = "".join(chunks[-300:])
         task["done"] = True
+        _record_history(tool_id, cmd, task.get("code"))
 
     threading.Thread(target=worker, daemon=True).start()
     return {"ok": True, "tool": tool_id, "command": cmd}

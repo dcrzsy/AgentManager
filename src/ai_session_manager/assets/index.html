@@ -691,6 +691,9 @@ tbody tr:hover .op-cell .op-preview, tr.selected .op-cell .op-preview { visibili
       <div class="view-head">
         <h2>🖥️ 环境检测</h2>
         <span class="view-sub">检测已安装工具、版本、多版本冲突与可用更新（升级需确认后执行）</span>
+        <span class="spacer" style="flex:1"></span>
+        <button class="btn sm" onclick="loadEnv(true)" title="重新检测所有工具">🔄 重新检测</button>
+        <button class="btn sm" onclick="openUpgradeHistory()" title="查看升级记录">🗂 升级历史</button>
       </div>
       <div class="stats-row">
         <div class="card stat-card accent">
@@ -717,6 +720,12 @@ tbody tr:hover .op-cell .op-preview, tr.selected .op-cell .op-preview { visibili
           <div class="stat-sub" id="envSysSub"></div>
           <span class="stat-ico">⚙️</span>
         </div>
+      </div>
+      <div class="card" style="padding:9px 14px;margin-bottom:14px;display:flex;gap:16px;flex-wrap:wrap;align-items:center">
+        <span style="font-size:12px;color:var(--muted)">📦 npm 源：<b id="envRegistry" style="font-family:var(--mono);font-size:11.5px">-</b></span>
+        <span style="font-size:12px;color:var(--muted)">🌐 代理：<b id="envProxy" style="font-family:var(--mono);font-size:11.5px">无</b></span>
+        <span style="font-size:12px;color:var(--muted)">💿 磁盘剩余：<b id="envDisk" style="font-family:var(--mono);font-size:11.5px">-</b></span>
+        <span style="font-size:12px;color:var(--faint)">影响升级是否走镜像 / 能否成功</span>
       </div>
       <div id="envProblemsPanel"></div>
       <div id="envTools"></div>
@@ -1937,7 +1946,7 @@ async function openMcpRaw(sourceTool) {
 let envCache = null;
 let envUpgradeTimers = {};
 
-async function loadEnv() {
+async function loadEnv(force) {
   document.getElementById('envTools').innerHTML = '<div class="card skeleton">' + Array.from({ length: 4 }, () =>
     '<div class="sk-row"><div class="sk" style="flex:1"></div><div class="sk" style="flex:2"></div><div class="sk" style="width:100px"></div></div>').join('') + '</div>';
   try {
@@ -1951,6 +1960,9 @@ async function loadEnv() {
     document.getElementById('envSysVer').textContent = (d.system.node || '').replace('v', 'Node ') + ' · Py' + (d.system.python || '').match(/[\d.]+/);
     document.getElementById('envSysSub').textContent = `${d.system.platform} / ${d.system.arch} · npm ${d.system.npm}`;
     document.getElementById('navEnvBadge').textContent = d.problem_count;
+    document.getElementById('envRegistry').textContent = d.system.npm_registry || 'npm 官方源';
+    document.getElementById('envProxy').textContent = Object.values(d.system.proxy || {}).join(' ') || '无';
+    document.getElementById('envDisk').textContent = d.system.disk_free_human || '未知';
     renderEnvProblems(d.problems);
     renderEnvTools(d.tools);
   } catch (e) {
@@ -2012,13 +2024,11 @@ function renderEnvTools(tools) {
   el.innerHTML = html || '<div class="empty-state"><div class="e-title">无可检测工具</div></div>';
 }
 
-function openUpgrade(toolId) {
+async function openUpgrade(toolId) {
   const t = (envCache.tools.find(x => x.id === toolId) || {});
-  let cmd = '';
-  try { cmd = window._upgradeCmds ? (window._upgradeCmds[toolId] || '') : ''; } catch (e) {}
   const body = `
     <div style="font-size:13.5px;line-height:1.9">
-      <p>将执行升级命令<code id="upgradeCmdShown" style="font-family:var(--mono);background:var(--card-2);padding:2px 8px;border-radius:6px"></code></p>
+      <p>将执行升级命令<code id="upgradeCmdShown" style="font-family:var(--mono);background:var(--card-2);padding:2px 8px;border-radius:6px">查询中…</code></p>
       <p style="color:var(--muted);font-size:12.5px">升级 <b>${escapeHtml(t.name || toolId)}</b>（当前 ${escapeHtml(t.version || '未知')}）。执行期间不要关闭本页面；完成后可在此查看输出。</p>
       <div class="upgrade-console" id="upgradeConsole">准备中…</div>
     </div>`;
@@ -2026,9 +2036,15 @@ function openUpgrade(toolId) {
     <button class="btn" onclick="closeGeneric()">关闭</button>
     <button class="btn primary" id="upgradeRunBtn" onclick="runUpgrade('${toolId}')">⬆️ 开始升级</button>`;
   openGeneric('⬆️ 升级 ' + (t.name || toolId), body, footer);
-  const cmds = { claude: 'npm update -g @anthropic-ai/claude-code', codex: 'npm update -g @openai/codex', pi: 'npm update -g @earendil-works/pi-coding-agent', aider: 'pip install -U aider-chat', gemini: 'npm update -g @google/gemini-cli' };
-  document.getElementById('upgradeCmdShown').textContent = cmds[toolId] || '官方渠道手动更新';
-  if (!cmds[toolId]) document.getElementById('upgradeRunBtn').disabled = true;
+  // 命令以后端白名单为准（避免前端硬编码与后端不一致）
+  try {
+    const info = await api('/api/env/upgrade-info?tool=' + encodeURIComponent(toolId));
+    document.getElementById('upgradeCmdShown').textContent = info.command || '官方渠道手动更新';
+    document.getElementById('upgradeRunBtn').disabled = !info.supports_upgrade;
+    if (!info.supports_upgrade) document.getElementById('upgradeRunBtn').textContent = '不支持自动升级';
+  } catch (e) {
+    document.getElementById('upgradeCmdShown').textContent = '无法获取命令';
+  }
 }
 
 async function runUpgrade(toolId) {
@@ -2055,6 +2071,23 @@ async function runUpgrade(toolId) {
       } catch (e) {}
     }, 1500);
   } catch (e) { consoleEl.textContent = '❌ ' + e.message; }
+}
+
+async function openUpgradeHistory() {
+  try {
+    const d = await api('/api/env/upgrade-history');
+    const items = d.items || [];
+    const body = items.length
+      ? `<table><thead><tr><th style="width:120px">时间</th><th>工具</th><th>命令</th><th style="width:90px">结果</th></tr></thead><tbody>` +
+        items.map(it => `<tr>
+          <td class="time-cell">${escapeHtml(it.at)}</td>
+          <td><b>${escapeHtml(it.tool_name)}</b></td>
+          <td style="font-family:var(--mono);font-size:11.5px;color:var(--muted)">${escapeHtml(it.command)}</td>
+          <td>${it.ok ? '<span style="color:var(--ok)">✅ 成功</span>' : '<span style="color:var(--danger)">❌ 失败（' + it.code + '）</span>'}</td>
+        </tr>`).join('') + '</tbody></table>'
+      : '<div class="empty-state"><div class="e-ico">🗂</div><div class="e-title">暂无升级记录</div><div class="e-hint">升级命令执行后会记录在这里（含结果与时间）。</div></div>';
+    openGeneric('🗂 升级历史', body);
+  } catch (e) { showToast('加载失败: ' + e.message, 'error'); }
 }
 
 /* ================= 通用弹窗 ================= */

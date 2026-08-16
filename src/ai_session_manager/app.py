@@ -1685,6 +1685,12 @@ class Handler(BaseHTTPRequestHandler):
             self._json_response(env_mod.env_report())
         elif path == "/api/env/upgrade-status":
             self._json_response(env_mod.upgrade_status(qs.get("tool", [""])[0]))
+        elif path == "/api/env/upgrade-history":
+            self._json_response(env_mod.upgrade_history())
+        elif path == "/api/env/upgrade-info":
+            t = qs.get("tool", [""])[0]
+            info = env_mod.upgrade_info(t) if t else {"error": "缺少 tool 参数"}
+            self._json_response(info, 200 if "error" not in info else 400)
         else:
             self.send_error(404)
 
