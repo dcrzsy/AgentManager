@@ -4,6 +4,7 @@ MCP 管理模块（多工具版）
 """
 
 import json
+import os
 import re
 from datetime import datetime
 from pathlib import Path
@@ -133,6 +134,8 @@ def mcp_servers():
                         "name": name,
                         "type": kind,
                         "detail": (cfg.get("command") or cfg.get("url") or "")[:60] + (f"  env={len(cfg.get('env') or {})}" if cfg.get("env") else ""),
+                        "command": cfg.get("command") or "",
+                        "url": cfg.get("url") or "",
                         "tool_count": 0,
                         "env_keys": _mask_env(cfg.get("env") or {}),
                     })
@@ -208,6 +211,78 @@ def mcp_tools(server_name=None, q=None, source_tool=None, limit=300):
         ql = q.lower()
         items = [i for i in items if ql in i["tool"].lower() or ql in i["description"].lower() or ql in i["server"].lower()]
     return {"items": items[:limit], "total": len(items), "truncated": len(items) > limit}
+
+
+def mcp_diagnostics():
+    """MCP 问题排查：解析失败、command 缺失、url 异常、env 引用缺失、跨源重名"""
+    problems = []
+    servers_sources = {}  # name -> [source tools]
+    for s in active_sources():
+        servers = []
+        try:
+            r = mcp_servers()
+            src = next((x for x in r["sources"] if x["tool"] == s["tool"]), None)
+            if src is None:
+                continue
+            servers = src["servers"]
+            if any(x.get("type") == "error" for x in servers):
+                problems.append({
+                    "module": "mcp", "tool": s["tool"], "level": "error",
+                    "message": f"{s['name']} 的 MCP 配置解析失败",
+                    "detail": str(s["path"]).replace(str(HOME), "~"),
+                })
+        except Exception as e:
+            problems.append({
+                "module": "mcp", "tool": s["tool"], "level": "error",
+                "message": f"{s['name']} MCP 配置读取异常: {e}",
+                "detail": str(s["path"]),
+            })
+            continue
+        for sv in servers:
+            if sv.get("type") == "error":
+                continue
+            servers_sources.setdefault(sv["name"], set()).add(s["tool"])
+            # 有 command 字段的（stdio 定义源）才做 PATH 检查
+            cmd = sv.get("command") or ""
+            if sv.get("type") == "stdio" and cmd:
+                cmd_part = cmd.split()[0].strip('"' + "'")
+                from shutil import which
+                if not which(cmd_part):
+                    problems.append({
+                        "module": "mcp", "tool": s["tool"], "level": "error",
+                        "message": f"服务器「{sv['name']}」命令不可用：{cmd_part} 不在 PATH 中",
+                        "detail": str(s["path"]).replace(str(HOME), "~"),
+                    })
+            # url 协议
+            url = sv.get("url") or ""
+            if sv.get("type") == "url" and url and not url.startswith(("http://", "https://")):
+                problems.append({
+                    "module": "mcp", "tool": s["tool"], "level": "warn",
+                    "message": f"服务器「{sv['name']}」URL 缺少 http(s) 协议头",
+                    "detail": url[:80],
+                })
+            # env 引用缺失
+            for e in sv.get("env_keys", []):
+                key = e["key"] if isinstance(e, dict) else str(e)
+                refs = re.findall(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}", key) or []
+                for ref in refs:
+                    if ref not in os.environ:
+                        problems.append({
+                            "module": "mcp", "tool": s["tool"], "level": "warn",
+                            "message": f"服务器「{sv['name']}」env 引用未定义的环境变量 ${{{ref}}}",
+                            "detail": str(s["path"]).replace(str(HOME), "~"),
+                        })
+    # 跨源重名
+    for name, tools in servers_sources.items():
+        if len(tools) > 1:
+            problems.append({
+                "module": "mcp", "tool": "multi", "level": "info",
+                "message": f"服务器「{name}」同时配置在多个工具（{'、'.join(sorted(tools))}）",
+                "detail": "通常正常，但确认各工具配置是否一致",
+            })
+    problems.sort(key=lambda x: {"error": 0, "warn": 1, "info": 2}.get(x["level"], 3))
+    srcs = active_sources()
+    return {"problems": problems, "problem_count": len(problems), "sources_checked": len(srcs)}
 
 
 def mcp_raw(source_tool="pi", limit=500000):

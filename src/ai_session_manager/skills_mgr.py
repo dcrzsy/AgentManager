@@ -207,6 +207,73 @@ def skill_update(path_str, content):
         return {"ok": False, "error": str(e)}
 
 
+def skills_diagnostics():
+    """Skill 问题排查：frontmatter 校验、同名冲突、空目录、残留备份"""
+    problems = []
+    items = skills_list()
+    by_name = {}
+    for s in items:
+        name = s["name"]
+        by_name.setdefault(name, []).append(s)
+        fm = s.get("frontmatter", {})
+        if not s.get("valid_frontmatter"):
+            problems.append({
+                "module": "skills", "tool": s["tool"], "level": "error",
+                "message": f"Skill「{s['name']}」frontmatter 不完整（缺少 name 或 description）",
+                "detail": s["root_display"] + "/" + s["rel_path"], "path": s["path"],
+            })
+        elif not fm.get("description"):
+            problems.append({
+                "module": "skills", "tool": s["tool"], "level": "warn",
+                "message": f"Skill「{s['name']}」缺少 description 描述",
+                "detail": s["root_display"] + "/" + s["rel_path"], "path": s["path"],
+            })
+        # 正文为空
+        try:
+            body = (Path(s["skill_file"]).read_text(encoding="utf-8", errors="replace") or "")
+            import re as _re
+            body = _re.sub(r"^---.*?---", "", body, flags=_re.S).strip()
+            if not body:
+                problems.append({
+                    "module": "skills", "tool": s["tool"], "level": "warn",
+                    "message": f"Skill「{s['name']}」正文为空（只有 frontmatter）",
+                    "detail": s["root_display"] + "/" + s["rel_path"], "path": s["path"],
+                })
+        except Exception:
+            pass
+    # 同名冲突
+    for name, group in by_name.items():
+        if len(group) > 1:
+            problems.append({
+                "module": "skills", "tool": "multi", "level": "warn",
+                "message": f"Skill「{name}」存在 {len(group)} 处同名定义",
+                "detail": "；".join(f"{g['scope']}@{g['root_display']}" for g in group),
+            })
+    # 空目录与残留备份
+    for root, scope, tid in SKILL_ROOTS:
+        if not root.is_dir():
+            continue
+        try:
+            for d in root.iterdir():
+                if d.is_dir():
+                    if not any(x.name == "SKILL.md" for x in d.iterdir()):
+                        problems.append({
+                            "module": "skills", "tool": tid, "level": "info",
+                            "message": f"Skills 根下存在无 SKILL.md 的目录：{d.name}",
+                            "detail": str(d).replace(str(HOME), "~"),
+                        })
+                elif d.name.startswith("SKILL.md.bak."):
+                    problems.append({
+                        "module": "skills", "tool": tid, "level": "warn",
+                        "message": f"残留备份文件 {d.name}",
+                        "detail": str(d).replace(str(HOME), "~"),
+                    })
+        except Exception:
+            pass
+    problems.sort(key=lambda x: {"error": 0, "warn": 1, "info": 2}.get(x["level"], 3))
+    return {"problems": problems, "problem_count": len(problems), "total_skills": len(items)}
+
+
 def skill_delete(path_str):
     """删除 skill 目录（移入回收站）"""
     d = Path(path_str).expanduser()

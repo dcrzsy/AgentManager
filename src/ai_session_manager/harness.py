@@ -5,6 +5,7 @@ Harness 配置管理模块（多工具版）
 """
 
 import json
+import os
 import re
 import shutil
 import sys
@@ -375,27 +376,143 @@ def harness_delete_backup(backup_path_str):
             return {"ok": False, "error": str(e2)}
 
 
+# 权限敏感的配置文件名
+SENSITIVE_NAMES = {"auth.json", "credentials.json", "web-search.json", "trust.json", "oauth_creds.json", "keychains"}
+
+
 def harness_health(tool=None):
-    """配置健康检查：JSON 合法性、备份数量"""
+    """配置健康检查：JSON 合法性、权限安全、备份健康、核心文件缺失"""
     checks = []
+    problems = []
+    seen_main = set()
     for item in harness_list(tool):
-        if item["is_backup"] or not item["editable"]:
+        p = Path(item["path"])
+        if item["is_backup"]:
+            # 孤儿备份：主文件已不存在
+            main_file = p.with_name(p.name.split(".bak.")[0])
+            if not main_file.exists():
+                problems.append({
+                    "module": "harness", "tool": item["tool"], "level": "warn",
+                    "message": f"孤儿备份：{item['name']} 的主文件已不存在",
+                    "detail": item["display_path"],
+                    "action": "clean-backup", "path": item["path"],
+                })
             continue
+        seen_main.add(item["path"])
         status, detail = "ok", ""
         if item["ext"] in (".json", ".jsonl"):
             try:
-                json.loads(Path(item["path"]).read_text(encoding="utf-8"))
+                raw_p = p.read_text(encoding="utf-8", errors="replace")
+                if item["ext"] == ".jsonl":
+                    # JSONL：逐行校验，全部失败才算 error
+                    bad_lines = 0
+                    total_lines = 0
+                    for line in raw_p.splitlines():
+                        line = line.strip()
+                        if not line:
+                            continue
+                        total_lines += 1
+                        try:
+                            json.loads(line)
+                        except Exception:
+                            bad_lines += 1
+                    if total_lines and bad_lines == total_lines:
+                        raise ValueError(f"全部 {total_lines} 行均非合法 JSON")
+                else:
+                    json.loads(raw_p)
             except Exception as e:
                 status, detail = "error", f"解析失败: {e}"
+                problems.append({
+                    "module": "harness", "tool": item["tool"], "level": "error",
+                    "message": f"{item['name']} 内容校验失败",
+                    "detail": str(e)[:120], "path": item["path"],
+                })
+        # 权限：敏感文件权限过宽（类 Unix）
+        if sys.platform != "win32" and item["name"] in SENSITIVE_NAMES:
+            try:
+                mode = p.stat().st_mode & 0o777
+                if mode & 0o077:
+                    problems.append({
+                        "module": "harness", "tool": item["tool"], "level": "error",
+                        "message": f"敏感文件 {item['name']} 权限过宽（{oct(mode)[2:]}），其他用户可读",
+                        "detail": item["display_path"],
+                        "action": "fix-permission", "path": item["path"],
+                    })
+            except Exception:
+                pass
+        # 可写性
+        if not os.access(p, os.W_OK):
+            problems.append({
+                "module": "harness", "tool": item["tool"], "level": "warn",
+                "message": f"{item['name']} 当前不可写，编辑保存可能失败",
+                "detail": item["display_path"], "path": item["path"],
+            })
         backups = len(harness_backups(item["path"]).get("items", []))
+        if backups > 10:
+            problems.append({
+                "module": "harness", "tool": item["tool"], "level": "info",
+                "message": f"{item['name']} 有 {backups} 份备份，建议清理旧备份",
+                "detail": item["display_path"],
+                "action": "clean-backups", "path": item["path"],
+            })
         checks.append({
-            "name": item["name"],
-            "path": item["path"],
-            "display_path": item["display_path"],
-            "tool": item["tool"],
-            "status": status,
-            "detail": detail,
-            "backup_count": backups,
+            "name": item["name"], "path": item["path"], "display_path": item["display_path"],
+            "tool": item["tool"], "status": status, "detail": detail, "backup_count": backups,
         })
-    errors = [c for c in checks if c["status"] != "ok"]
-    return {"total": len(checks), "errors": errors, "checks": checks}
+    # 核心文件缺失提示（每工具第一分类）
+    for tid, meta in HARNESS_TOOLS.items():
+        if tool and tid != tool:
+            continue
+        if not any(r.is_dir() for r in tool_roots(tid)):
+            continue
+        first_cat = next(iter(meta.get("categories", {}).values())) if meta.get("categories") else []
+        if first_cat:
+            for core_name in (first_cat if isinstance(first_cat, list) else []):
+                exists = any(str(i["path"]).endswith("/" + core_name) for i in checks)
+                if not exists:
+                    problems.append({
+                        "module": "harness", "tool": tid, "level": "info",
+                        "message": f"{meta['name']} 缺少核心配置文件 {core_name}（可能使用默认值）",
+                        "detail": "",
+                    })
+    problems.sort(key=lambda x: {"error": 0, "warn": 1, "info": 2}.get(x["level"], 3))
+    return {"total": len(checks), "errors": [c for c in checks if c["status"] != "ok"],
+            "checks": checks, "problems": problems, "problem_count": len(problems)}
+
+
+def harness_fix(path_str, action):
+    """执行白名单修复动作"""
+    p = Path(path_str).expanduser()
+    if not in_harness_root(p):
+        return {"ok": False, "error": "路径不在受支持的配置目录下"}
+    if action == "fix-permission" and sys.platform != "win32":
+        if not p.is_file():
+            return {"ok": False, "error": "文件不存在"}
+        try:
+            os.chmod(p, 0o600)
+            return {"ok": True, "message": "已收紧权限为 600"}
+        except Exception as e:
+            return {"ok": False, "error": str(e)}
+    if action == "clean-backup":
+        if ".bak" not in p.name:
+            return {"ok": False, "error": "不是备份文件"}
+        try:
+            p.unlink()
+            return {"ok": True, "message": "已清理孤儿备份"}
+        except Exception as e:
+            return {"ok": False, "error": str(e)}
+    if action == "clean-backups":
+        # 保留最近 5 份，其余移入回收站
+        baks = harness_backups(str(p)).get("items", [])
+        if len(baks) <= 5:
+            return {"ok": False, "error": "备份数量未超过 5 份"}
+        removed = 0
+        for b in baks[5:]:
+            from .app import move_to_trash
+            try:
+                if move_to_trash(Path(b["path"])):
+                    removed += 1
+            except Exception:
+                pass
+        return {"ok": True, "message": f"已清理 {removed} 份旧备份（移入回收站）"}
+    return {"ok": False, "error": "未知修复动作"}

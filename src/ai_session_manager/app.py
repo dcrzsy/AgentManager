@@ -1672,6 +1672,10 @@ class Handler(BaseHTTPRequestHandler):
                 "items": skills_mod.skills_list(qs.get("q", [""])[0], qs.get("tool", [""])[0] or None),
                 "roots": [str(r) for r, _, _ in skills_mod.SKILL_ROOTS],
             })
+        elif path == "/api/skills/diagnostics":
+            self._json_response(skills_mod.skills_diagnostics())
+        elif path == "/api/mcp/diagnostics":
+            self._json_response(mcp_mod.mcp_diagnostics())
         elif path == "/api/skills/get":
             self._json_response(skills_mod.skill_get(qs.get("path", [""])[0]))
         # ---------- MCP 管理 ----------
@@ -1793,6 +1797,10 @@ class Handler(BaseHTTPRequestHandler):
         elif parsed.path == "/api/skills/delete":
             data = self._json_body()
             r = skills_mod.skill_delete(data.get("path", ""))
+            self._json_response(r, 200 if r.get("ok") else 400)
+        elif parsed.path == "/api/harness/fix":
+            data = self._json_body()
+            r = harness_mod.harness_fix(data.get("path", ""), data.get("action", ""))
             self._json_response(r, 200 if r.get("ok") else 400)
         elif parsed.path == "/api/env/upgrade":
             data = self._json_body()

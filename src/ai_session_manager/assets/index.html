@@ -604,6 +604,7 @@ tbody tr:hover .op-cell .op-preview, tr.selected .op-cell .op-preview { visibili
         <span class="view-sub" id="harnessRoot"></span>
       </div>
       <div id="harnessHealth"></div>
+      <div id="harnessProblems"></div>
       <div class="harness-layout">
         <div class="card harness-files" id="harnessFiles"></div>
         <div class="card harness-editor" id="harnessEditor">
@@ -639,6 +640,7 @@ tbody tr:hover .op-cell .op-preview, tr.selected .op-cell .op-preview { visibili
           <button class="btn" onclick="loadSkills()">🔄 刷新</button>
         </div>
       </div>
+      <div id="skillsProblems"></div>
       <div id="skillsContent"></div>
     </div>
 
@@ -683,6 +685,7 @@ tbody tr:hover .op-cell .op-preview, tr.selected .op-cell .op-preview { visibili
           <button class="btn" onclick="loadMcp()">🔄 刷新</button>
         </div>
       </div>
+      <div id="mcpProblems"></div>
       <div id="mcpContent"></div>
     </div>
 
@@ -1546,15 +1549,15 @@ function renderHarnessFiles() {
 async function loadHarnessHealth() {
   try {
     const h = await api('/api/harness/health');
-    const errs = h.errors || [];
-    document.getElementById('harnessHealth').innerHTML = errs.length
-      ? `<div class="card" style="padding:10px 14px;margin-bottom:14px;border-color:var(--danger)">
-          <span style="color:var(--danger);font-weight:600">⚠️ ${errs.length} 个配置存在问题：</span>
-          ${errs.map(e => `<span style="font-family:var(--mono);font-size:12px;margin-left:10px">${escapeHtml(e.name)} — ${escapeHtml(e.detail)}</span>`).join('')}
-        </div>`
-      : `<div class="card" style="padding:10px 14px;margin-bottom:14px;border-color:var(--ok)">
-          <span style="color:var(--ok)">✅ ${h.total} 个配置文件均正常 · 共 ${h.checks.reduce((a, c) => a + c.backup_count, 0)} 份历史备份</span>
-        </div>`;
+    const totalBak = h.checks.reduce((a, c) => a + c.backup_count, 0);
+    document.getElementById('harnessHealth').innerHTML =
+      `<div class="card" style="padding:10px 14px;margin-bottom:8px;border-color:${h.problems.length ? 'var(--warn)' : 'var(--ok)'}">
+        <span style="color:${h.problems.length ? 'var(--warn)' : 'var(--ok)'};font-weight:600">
+          ${h.problems.length ? '🩺 发现 ' + h.problems.length + ' 个配置问题' : '✅ ' + h.total + ' 个配置文件均正常'}
+        </span>
+        <span style="font-size:12px;color:var(--faint);margin-left:12px">共 ${totalBak} 份历史备份</span>
+      </div>`;
+    renderGenericProblems('harnessProblems', h.problems, 'H');
   } catch (e) {}
 }
 async function openHarnessFile(pathStr) {
@@ -1688,9 +1691,10 @@ async function loadSkills() {
   document.getElementById('skillsContent').innerHTML = '<div class="card skeleton">' + Array.from({ length: 6 }, () =>
     '<div class="sk-row"><div class="sk" style="flex:1"></div><div class="sk" style="flex:2"></div></div>').join('') + '</div>';
   try {
-    const data = await api('/api/skills/list');
+    const [data, diag] = await Promise.all([api('/api/skills/list'), api('/api/skills/diagnostics')]);
     skillsCache = data.items || [];
     document.getElementById('navSkillsBadge').textContent = skillsCache.length;
+    renderGenericProblems('skillsProblems', diag.problems, 'S');
     renderSkills();
   } catch (e) {
     document.getElementById('skillsContent').innerHTML = '<div class="empty-state"><div class="e-title">加载失败</div><div class="e-hint">' + escapeHtml(e.message) + '</div></div>';
@@ -1826,7 +1830,8 @@ async function loadMcp() {
   document.getElementById('mcpContent').innerHTML = '<div class="card skeleton">' + Array.from({ length: 5 }, () =>
     '<div class="sk-row"><div class="sk" style="flex:1"></div><div class="sk" style="flex:3"></div></div>').join('') + '</div>';
   try {
-    const data = await api('/api/mcp/servers');
+    const [data, diag] = await Promise.all([api('/api/mcp/servers'), api('/api/mcp/diagnostics')]);
+    renderGenericProblems('mcpProblems', diag.problems, 'M');
     mcpCache = data;
     document.getElementById('mcpServerCount').textContent = num(data.total_servers);
     document.getElementById('mcpToolCount').textContent = num(data.total_tools);
@@ -1938,6 +1943,42 @@ async function openMcpRaw(sourceTool) {
     if (d.error) { showToast(d.error, 'error'); return; }
     openGeneric('📜 ' + (d.tool_name || 'MCP') + ' 原始配置', `<pre style="max-height:65vh">${escapeHtml(d.content)}</pre>`);
   } catch (e) { showToast('加载失败: ' + e.message, 'error'); }
+}
+
+/* ================================================================
+   通用问题排查面板（harness / skills / mcp）
+   ================================================================ */
+async function fixHarnessIssue(path, action, btn) {
+  if (!confirmDialog) {}
+  confirmDialog({
+    title: '执行修复',
+    message: action === 'fix-permission' ? '收紧文件权限为 600（仅本人可读写）？'
+      : action === 'clean-backup' ? '删除此孤儿备份？' : '清理旧备份（保留最近 5 份，其余移入回收站）？',
+    okText: '🔧 修复',
+    okClass: 'ok',
+    onOk: async () => {
+      try {
+        const r = await api('/api/harness/fix', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path, action }) });
+        if (r.ok) { showToast(r.message || '修复完成'); loadHarnessHealth(); }
+        else showToast('修复失败: ' + r.error, 'error');
+      } catch (e) { showToast('修复失败: ' + e.message, 'error'); }
+    },
+  });
+}
+function renderGenericProblems(containerId, problems, prefix) {
+  const el = document.getElementById(containerId);
+  if (!el) return;
+  if (!problems || !problems.length) { el.innerHTML = ''; return; }
+  const ico = { error: '🔴', warn: '🟠', info: 'ℹ️' };
+  el.innerHTML = `<div style="margin-bottom:12px">` + problems.map((p, i) => `
+    <div class="card problem-card ${p.level}" style="margin-bottom:8px">
+      <span class="p-ico">${ico[p.level] || 'ℹ️'}</span>
+      <div style="flex:1">
+        <div class="p-msg" style="font-size:12.5px">${p.tool !== 'multi' ? '<span style="font-family:var(--mono);font-size:10px;color:var(--faint)">[' + escapeHtml(p.tool) + ']</span> ' : ''}${escapeHtml(p.message)}</div>
+        ${p.detail ? `<div class="p-detail">${escapeHtml(p.detail)}</div>` : ''}
+      </div>
+      ${p.action && p.path ? `<button class="btn sm" style="color:var(--primary);border-color:var(--primary)" onclick="fixHarnessIssue('${escapeHtml(p.path)}', '${p.action}', this)">🔧 修复</button>` : ''}
+    </div>`).join('') + '</div>';
 }
 
 /* ================================================================
