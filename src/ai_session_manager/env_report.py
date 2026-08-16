@@ -911,7 +911,7 @@ def _uninstall_npm_all_envs(pkg, tool_id):
     # 1. 主环境用 npm uninstall（规范卸载，更新 npm 记录）
     primary = _primary_npm()
     try:
-        code, out = _run([primary, "uninstall", "-g", pkg], timeout=90)
+        code, out = _run_with_bins([primary, "uninstall", "-g", pkg], timeout=90)
         lines.append(f"主环境卸载（{primary}）：" + (out.strip()[:200] or f"退出码 {code}"))
     except Exception as e:
         lines.append(f"主环境卸载异常：{e}")
@@ -1068,7 +1068,14 @@ def start_uninstall(tool_id):
         def worker():
             try:
                 out = _uninstall_npm_all_envs(pkg, tool_id)
-                task["code"] = 0
+                # 卸载后验证：主环境全局包应已消失（use_cache=False 强制重新检测）
+                remain = _npm_global_version(pkg, use_cache=False)
+                if remain:
+                    task["code"] = 1
+                    out += f"\n⚠️ 卸载验证未通过：主环境仍检测到 {pkg} {remain}"
+                else:
+                    task["code"] = 0
+                    out += "\n✓ 卸载验证通过：主环境已无该包"
                 task["output"] = out
             except Exception as e:
                 task["code"] = -1
