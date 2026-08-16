@@ -62,11 +62,12 @@ TOOLS = {
         "name": "Orca",
         "bin": ["orca"],
         "version_args": ["--version"],
+        "cli_version_safe": False,   # 桌面应用：执行 CLI 会与 daemon 握手，可能干扰主程序
         "npm_pkg": None,
         "config": [HOME / ".config" / "orca"],
         "upgrade_cmd": None,
         "upgrade_via": "桌面应用（官方渠道更新）",
-        "run_proc": ["orca"],
+        "run_proc": ["orca-ide", "daemon-entry"],
     },
     "hermes": {
         "name": "Hermes",
@@ -169,6 +170,24 @@ def _human_size(n):
             return f"{n:.1f} {unit}"
         n /= 1024
     return f"{n:.1f} PB"
+
+
+def _version_from_process(proc_names):
+    """从运行进程参数中解析版本（如 orca daemon 的 --app-version 1.4.183），无副作用"""
+    try:
+        r = subprocess.run(["ps", "-eo", "args"], capture_output=True, text=True, timeout=5)
+        for line in r.stdout.splitlines():
+            if not any(n in line for n in proc_names):
+                continue
+            m = re.search(r"--app-version\s+([\w.+-]+)", line)
+            if m:
+                return m.group(1)
+            m = re.search(r"--version\s+([\w.+-]+)", line)
+            if m:
+                return m.group(1)
+    except Exception:
+        pass
+    return ""
 
 
 def _extract_version(raw):
@@ -298,11 +317,18 @@ def env_report():
         bins = []
         versions = set()
         version_output_issues = []
+        cli_safe = meta.get("cli_version_safe", True)
         for b in meta["bin"]:
             for p in _which_all(b):
-                code, out = _run([p, *meta["version_args"]], timeout=8)
-                raw = out.strip().splitlines()[0][:60] if out.strip() else ""
-                v = _extract_version(raw)
+                v = ""
+                raw = ""
+                if cli_safe:
+                    code, out = _run([p, *meta["version_args"]], timeout=8)
+                    raw = out.strip().splitlines()[0][:60] if out.strip() else ""
+                    v = _extract_version(raw)
+                else:
+                    # 桌面应用：不执行 CLI（避免与主程序交互），从运行进程参数解析版本
+                    v = _version_from_process(meta.get("run_proc", []))
                 if raw and not v:
                     version_output_issues.append(f"{p}: {raw}")
                 bins.append({"path": p, "version": v})
