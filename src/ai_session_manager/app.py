@@ -1833,6 +1833,13 @@ class Handler(BaseHTTPRequestHandler):
             r = env_mod.start_upgrade(data["tool"])
             # 业务性拒绝（已最新/不支持/进行中）返回 200，便于前端直接展示 error 文案
             self._json_response(r, 200)
+        elif parsed.path == "/api/env/reinstall":
+            data = self._json_body()
+            if not isinstance(data.get("tool"), str) or not data["tool"]:
+                self._json_response({"ok": False, "error": "缺少 tool 参数"}, 400)
+                return
+            r = env_mod.start_reinstall(data["tool"])
+            self._json_response(r, 200)
         elif parsed.path == "/api/env/uninstall":
             if env_mod.admin_write_error():
                 self._json_response({"ok": False, "error": env_mod.admin_write_error()}, 200)

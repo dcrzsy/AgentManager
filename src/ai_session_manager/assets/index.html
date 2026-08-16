@@ -2104,6 +2104,7 @@ function renderEnvProblems(problems) {
         ${p.detail ? `<div class="p-detail">${escapeHtml(p.detail)}</div>` : ''}
       </div>
       ${p.tool && envCache && envCache.upgradeable.includes(p.tool) ? `<button class="btn sm primary" onclick="openUpgrade('${p.tool}')">⬆️ 升级</button>` : ''}
+      ${p.action && p.action.type === 'reinstall' ? `<button class="btn sm primary" onclick="fixReinstall('${p.action.tool}')" title="重新安装以修复损坏的 CLI">🔧 修复</button>` : ''}
     </div>`).join('');
 }
 
@@ -2193,6 +2194,28 @@ async function uninstallTool(toolId) {
           clearInterval(poll);
           const okMsg = st.code === 0 ? '✅ ' + name + ' 已卸载' : '❌ ' + name + ' 卸载失败（退出码 ' + st.code + '）';
           alert(okMsg + '\n\n' + (st.output || '').slice(-1200));
+          loadEnv();
+        }
+      } catch (e) {}
+    }, 1500);
+  } catch (e) { alert('❌ ' + e.message); }
+}
+
+async function fixReinstall(toolId) {
+  const t = envCache.tools.find(x => x.id === toolId);
+  const name = t ? t.name : toolId;
+  if (!confirm('重新安装 ' + name + ' 以修复 CLI 损坏？\n\n将执行：npm install -g <pkg>@latest（含 --allow-scripts）')) return;
+  try {
+    const r = await api('/api/env/reinstall', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tool: toolId }) });
+    if (!r.ok) { alert('⚠️ ' + (r.error || '无法开始重装')); return; }
+    alert('⏳ 正在重装 ' + name + '...（完成后自动验证版本）');
+    const poll = setInterval(async () => {
+      try {
+        const st = await api('/api/env/upgrade-status?tool=' + toolId);
+        if (st.done) {
+          clearInterval(poll);
+          const head = st.code === 0 ? '✅ ' + name + ' 重装完成' : '❌ ' + name + ' 重装失败（退出码 ' + st.code + '）';
+          alert(head + '\n\n' + (st.output || '').slice(-1500));
           loadEnv();
         }
       } catch (e) {}

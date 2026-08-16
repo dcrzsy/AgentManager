@@ -269,6 +269,15 @@ def version_gt(a, b):
     return len(ta) > len(tb)
 
 
+def _run_with_bins(cmd, timeout=8):
+    """以增强 PATH 运行（当前 PATH + 已知 bin 目录）。
+    管理员模式(root)下 PATH 常缺 nvm/node，导致 codex/pi 等 node 脚本执行失败"""
+    env = os.environ.copy()
+    extra = _known_bin_dirs()
+    env["PATH"] = os.pathsep.join(extra + [env.get("PATH", "")])
+    return _run(cmd, timeout=timeout, env=env)
+
+
 def _run(cmd, timeout=8, env=None):
     try:
         r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, env=env)
@@ -634,7 +643,7 @@ def env_report():
                 v = ""
                 raw = ""
                 if cli_safe:
-                    code, out = _run([p, *meta["version_args"]], timeout=8)
+                    code, out = _run_with_bins([p, *meta["version_args"]], timeout=8)
                     raw = out.strip().splitlines()[0][:60] if out.strip() else ""
                     v = _extract_version(raw)
                 else:
@@ -649,10 +658,12 @@ def env_report():
                 if v:
                     versions.add(v)
         if version_output_issues:
+            act = {"type": "reinstall", "tool": tid} if UPGRADE_CMDS.get(tid) else None
             problems_i.append({
                 "tool": tid, "level": "error",
                 "message": f"{meta['name']} CLI 版本输出异常（可能是安装脚本未执行或安装损坏）",
                 "detail": "；".join(version_output_issues[:3]) + "。npm 全局包可尝试带 --allow-scripts 重新安装",
+                "action": act,
             })
 
         installed = bool(bins)
@@ -860,7 +871,7 @@ def start_upgrade(tool_id):
             if meta:
                 for b in meta["bin"]:
                     for p in _which_all(b):
-                        code, out = _run([p, *meta["version_args"]], timeout=10)
+                        code, out = _run_with_bins([p, *meta["version_args"]], timeout=10)
                         raw = out.strip().splitlines()[0][:60] if out.strip() else ""
                         v = _extract_version(raw)
                         if code == 0:
@@ -960,6 +971,76 @@ def _uninstall_npm_all_envs(pkg, tool_id):
     else:
         lines.append("✓ 已验证：所有环境均已卸载干净")
     return "\n".join(lines)
+
+
+def start_reinstall(tool_id):
+    """重装修复：执行升级命令但跳过'已最新'拦截（用于安装损坏/版本输出异常场景）"""
+    cmd = UPGRADE_CMDS.get(tool_id)
+    if not cmd:
+        return {"ok": False, "error": "该工具不支持自动重装，请走官方渠道"}
+    if "npm install" in cmd and cmd.startswith("npm "):
+        cmd = cmd.replace("npm ", _primary_npm() + " ", 1)
+    with _upgrade_lock:
+        if tool_id in _upgrade_tasks and not _upgrade_tasks[tool_id].get("done"):
+            return {"ok": False, "error": "该工具已有任务在进行中"}
+    task = {"tool": tool_id, "start": time.time(), "output": "",
+            "done": False, "code": None, "type": "reinstall"}
+    with _upgrade_lock:
+        _upgrade_tasks[tool_id] = task
+
+    def worker():
+        try:
+            proc = subprocess.Popen(
+                cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                text=True, errors="replace", bufsize=1,
+            )
+            chunks = []
+            total = 0
+            while True:
+                line = proc.stdout.readline()
+                if not line:
+                    break
+                chunks.append(line)
+                total += len(line)
+                if total > 20000:
+                    chunks = chunks[-200:]
+                    total = sum(len(c) for c in chunks)
+            proc.wait()
+            task["code"] = proc.returncode
+        except Exception as e:
+            task["code"] = -1
+            chunks = chunks if 'chunks' in dir() else []
+            chunks.append(f"\n[执行异常] {e}")
+        task["output"] = "".join(chunks[-300:])
+        task["done"] = True
+        _record_history(tool_id, f"重装: {cmd}", task.get("code"), htype="reinstall")
+        # 重装后验证
+        try:
+            meta = TOOLS.get(tool_id)
+            verify_lines = []
+            if meta:
+                for b in meta["bin"]:
+                    for p in _which_all(b):
+                        code, out = _run_with_bins([p, *meta["version_args"]], timeout=10)
+                        raw = out.strip().splitlines()[0][:60] if out.strip() else ""
+                        v = _extract_version(raw)
+                        if code == 0:
+                            if v:
+                                verify_lines.append(f"版本验证: {b} → {v}")
+                            else:
+                                verify_lines.append(f"⚠️ 版本验证异常: {b} → {raw or '(无输出)'}（可能仍缺 node，见上方输出）")
+                        else:
+                            verify_lines.append(f"⚠️ 版本命令失败({code}): {b}")
+                        break
+                    if verify_lines:
+                        break
+            if verify_lines:
+                task["output"] += "\n" + "\n".join(verify_lines)
+        except Exception:
+            pass
+
+    threading.Thread(target=worker, daemon=True).start()
+    return {"ok": True, "tool": tool_id, "command": cmd}
 
 
 def start_uninstall(tool_id):
