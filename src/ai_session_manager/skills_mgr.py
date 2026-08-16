@@ -291,6 +291,7 @@ def skills_diagnostics():
                 "module": "skills", "tool": s["tool"], "level": "warn",
                 "message": f"Skill「{s['name']}」缺少 description 描述",
                 "detail": s["root_display"] + "/" + s["rel_path"], "path": s["path"],
+                "fixable": "description", "path": s["path"],
             })
         # 正文为空
         try:
@@ -325,17 +326,60 @@ def skills_diagnostics():
                             "module": "skills", "tool": tid, "level": "info",
                             "message": f"Skills 根下存在无 SKILL.md 的目录：{d.name}",
                             "detail": str(d).replace(str(HOME), "~"),
+                            "fixable": "emptydir", "path": str(d),
                         })
                 elif d.name.startswith("SKILL.md.bak."):
                     problems.append({
                         "module": "skills", "tool": tid, "level": "warn",
                         "message": f"残留备份文件 {d.name}",
                         "detail": str(d).replace(str(HOME), "~"),
+                        "fixable": "backup", "path": str(d),
                     })
         except Exception:
             pass
     problems.sort(key=lambda x: {"error": 0, "warn": 1, "info": 2}.get(x["level"], 3))
     return {"problems": problems, "problem_count": len(problems), "total_skills": len(items)}
+
+
+def skill_cleanup(emptydirs=None, backups=None):
+    """清理空目录（移回收站）与残留备份文件（删除）。白名单校验路径"""
+    if admin_write_error():
+        return {"ok": False, "error": admin_write_error()}
+    if emptydirs is None and backups is None:
+        return {"ok": False, "error": "缺少清理目标"}
+    from .app import move_to_trash
+    removed = []
+    allowed = [str(r) for r, _, _ in SKILL_ROOTS]
+
+    def _safe(p, must_under_roots=True):
+        p = Path(p).expanduser().resolve()
+        if must_under_roots and not any(str(p).startswith(r + "/") for r in allowed):
+            return None
+        return p
+
+    if emptydirs:
+        for ps in emptydirs:
+            d = _safe(ps)
+            if not d or not d.is_dir():
+                continue
+            # 二次校验：必须是空目录（无 SKILL.md 且无子文件）
+            if any(x for x in d.rglob("*")):
+                continue
+            if move_to_trash(d):
+                removed.append(f"✓ 空目录已移入回收站: {d.name}")
+    if backups:
+        for ps in backups:
+            f = _safe(ps)
+            if not f or not f.is_file():
+                continue
+            if not f.name.startswith("SKILL.md.bak."):
+                continue
+            try:
+                f.unlink(missing_ok=True)
+                removed.append(f"✓ 已删除残留备份: {f.name}")
+            except Exception as e:
+                removed.append(f"⚠️ 备份删除失败: {e}")
+    return {"ok": True, "lines": removed}
 
 
 def skill_delete(path_str):

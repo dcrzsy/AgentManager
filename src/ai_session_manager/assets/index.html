@@ -727,6 +727,7 @@ input[type="checkbox"]:active { transform: scale(.8); }
           <button class="btn" onclick="loadSkills()">🔄 刷新</button>
         </div>
       </div>
+      <div id="skillsStats" style="margin-bottom:12px"></div>
       <div id="skillsProblems"></div>
       <div id="skillsContent"></div>
     </div>
@@ -1823,10 +1824,26 @@ async function loadSkills() {
     skillsCache = data.items || [];
     document.getElementById('navSkillsBadge').textContent = skillsCache.length;
     renderGenericProblems('skillsProblems', diag.problems, 'S');
+    renderSkillStats(diag);
     renderSkills();
   } catch (e) {
     document.getElementById('skillsContent').innerHTML = '<div class="empty-state"><div class="e-title">加载失败</div><div class="e-hint">' + escapeHtml(e.message) + '</div></div>';
   }
+}
+function renderSkillStats(diag) {
+  const el = document.getElementById('skillsStats');
+  if (!el) return;
+  const total = skillsCache.length;
+  const scopes = {};
+  skillsCache.forEach(s => { const k = (s.scope || 'other').split(':')[0]; scopes[k] = (scopes[k] || 0) + 1; });
+  const chips = ['user', 'global', 'project', 'memory'].filter(k => scopes[k]).map(k =>
+    `<span class="chip" style="padding:3px 10px"><b>${k}</b>: ${scopes[k]}</span>`).join('');
+  const warn = (diag && diag.problems ? diag.problems.filter(p => p.level !== 'info').length : 0);
+  el.innerHTML = `<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:12px;color:var(--muted)">
+    <span>共 <b style="color:var(--primary)">${total}</b> 个 Skill</span>${chips}
+    ${warn ? `<span class="env-badge warn" style="background:var(--warn-soft,#fef5e7);color:#e67e22">⚠️ ${warn} 个待处理</span>` : ''}
+    ${(diag && diag.problem_count) ? `<span class="env-badge idle">ℹ️ 共 ${diag.problem_count} 条诊断</span>` : ''}
+  </div>`;
 }
 function renderSkills() {
   const q = document.getElementById('skillSearch').value.trim().toLowerCase();
@@ -1842,7 +1859,9 @@ function renderSkills() {
   }
   el.innerHTML = `<div class="skill-grid">` + list.map(s => `
     <div class="card skill-card" onclick="openSkillDetail('${escapeHtml(s.path)}')">
-      <div class="sk-name">${escapeHtml(s.name)}
+      <div class="sk-name">
+        ${TOOL_ICO[s.tool] ? `<img class="env-ico-img" style="width:20px;height:20px;padding:1px;border-radius:5px" src="${TOOL_ICO[s.tool]}" alt="" onerror="this.style.display='none'">` : ''}
+        <span style="overflow:hidden;text-overflow:ellipsis">${escapeHtml(s.name)}</span>
         <span class="scope-badge ${s.scope.startsWith('project') ? 'project' : s.scope}">${escapeHtml(s.scope)}</span>
         ${s.valid_frontmatter ? '' : '<span class="fm-warn" title="frontmatter 缺失或无效">⚠️</span>'}
       </div>
@@ -1863,7 +1882,11 @@ async function openSkillDetail(pathStr) {
       <div style="margin-bottom:10px;font-size:12px;color:var(--faint);font-family:var(--mono)">${escapeHtml(d.skill_file)}</div>
       ${d.files.length ? `<div style="margin-bottom:10px"><b style="font-size:12.5px;color:var(--muted)">同目录文件 (${d.files.length})：</b>${d.files.map(f => `<span class="chip">${escapeHtml(f.name)}</span>`).join('')}</div>` : ''}
       <pre>${escapeHtml(d.raw)}</pre>`;
+    window._genericSkillData = d;
     const footer = `
+      <button class="btn" onclick="copyText('${escapeHtml(d.path)}', '路径')">📋 复制路径</button>
+      <button class="btn" onclick="copyText(window._genericSkillData.raw, '内容')">📋 复制内容</button>
+      <span style="flex:1"></span>
       <button class="btn" onclick="closeGeneric()">关闭</button>
       <button class="btn primary" onclick="openSkillEdit('${escapeHtml(d.path)}', '${escapeHtml(d.name)}')">✏️ 编辑</button>
       <button class="btn danger" onclick="deleteSkill('${escapeHtml(d.path)}', '${escapeHtml(d.name)}')">🗑️ 删除</button>`;
@@ -1872,18 +1895,38 @@ async function openSkillDetail(pathStr) {
 }
 function openSkillEdit(pathStr, name) {
   const d = window._genericSkillData;
+  if (!d) { showToast('数据未加载，请重新打开', 'error'); return; }
+  const fm = d.frontmatter || {};
+  const extra = Object.keys(fm).filter(k => k !== 'name' && k !== 'description');
   document.getElementById('genericBody').innerHTML = `
     <div class="skill-form">
-      <label>Skill 内容（SKILL.md，含 frontmatter）</label>
-      <textarea id="skillEditArea" spellcheck="false">${escapeHtml(d.raw)}</textarea>
+      <label>名称（name）</label>
+      <input id="skillEditName" value="${escapeHtml(fm.name || '')}" placeholder="skill 名称">
+      <label>描述（description）</label>
+      <input id="skillEditDesc" value="${escapeHtml(fm.description || '')}" placeholder="何时使用这个 Skill">
+      ${extra.length ? `<label>其他 frontmatter 字段（将保留）</label>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:4px">${extra.map(k => `<span class="chip"><b>${escapeHtml(k)}</b>: ${escapeHtml(String(fm[k]).slice(0,40))}</span>`).join('')}</div>` : ''}
+      <label>正文（SKILL.md body）</label>
+      <textarea id="skillEditArea" spellcheck="false" style="min-height:300px">${escapeHtml(d.body || '')}</textarea>
       <div style="display:flex;gap:8px;margin-top:10px">
         <button class="btn primary" onclick="saveSkillEdit('${escapeHtml(pathStr)}')">💾 保存</button>
         <button class="btn" onclick="openSkillDetail('${escapeHtml(pathStr)}')">取消</button>
       </div>
     </div>`;
 }
+function assembleSkillRaw(fm, body) {
+  const lines = Object.entries(fm).map(([k, v]) => `${k}: ${String(v).replace(/\n/g, ' ').trim()}`);
+  return `---\n${lines.join('\n')}\n---\n\n${(body || '').trim()}\n`;
+}
 async function saveSkillEdit(pathStr) {
-  const content = document.getElementById('skillEditArea').value;
+  const d = window._genericSkillData;
+  const name = document.getElementById('skillEditName').value.trim();
+  const desc = document.getElementById('skillEditDesc').value.trim();
+  const body = document.getElementById('skillEditArea').value;
+  if (!name) { showToast('名称不能为空', 'error'); return; }
+  const fm = Object.assign({}, d.frontmatter || {});
+  fm.name = name; fm.description = desc;
+  const content = assembleSkillRaw(fm, body);
   try {
     const r = await api('/api/skills/update', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -1908,6 +1951,60 @@ async function deleteSkill(pathStr, name) {
       } catch (e) { showToast('删除失败: ' + e.message, 'error'); }
     },
   });
+}
+async function fixSkillIssue(pathStr, fixType, btn) {
+  try {
+    if (fixType === 'description') {
+      // 打开小弹窗补 description
+      const d = await api('/api/skills/get?path=' + encodeURIComponent(pathStr));
+      if (d.error) { showToast(d.error, 'error'); return; }
+      window._genericSkillData = d;
+      const body = `
+        <div class="skill-form">
+          <label>为 Skill「${escapeHtml(d.name)}」补充描述（description）</label>
+          <input id="fixDescInput" placeholder="何时使用这个 Skill" value="${escapeHtml(d.frontmatter.description || '')}">
+          <p style="font-size:12px;color:var(--faint);margin:8px 0 0">保存后将写入 frontmatter。</p>
+        </div>`;
+      const footer = `
+        <button class="btn" onclick="closeGeneric()">取消</button>
+        <button class="btn primary" onclick="doFixDescription('${escapeHtml(pathStr)}')">💾 保存描述</button>`;
+      openGeneric('📝 补充描述', body, footer);
+      return;
+    }
+    if (fixType === 'emptydir') {
+      const dirName = pathStr.split('/').pop();
+      confirmDialog({
+        title: '🧹 清理空目录',
+        okText: '🧹 移入回收站',
+        html: '<p style="margin:0 0 6px">将把空目录 <b>' + escapeHtml(dirName) + '</b> 移入回收站（可恢复）。</p>' +
+              '<p style="margin:0;color:var(--muted);font-size:12.5px">仅当目录内无任何文件时才会被清理，非空目录将自动跳过。</p>',
+        onOk: async () => {
+          const r = await api('/api/skills/cleanup', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ emptydirs: [pathStr] }) });
+          if (r.ok) { showToast((r.lines && r.lines[0]) || '已清理', 'success'); loadSkills(); }
+          else showToast(r.error || '清理失败', 'error');
+        },
+      });
+      return;
+    }
+    if (fixType === 'backup') {
+      const r = await api('/api/skills/cleanup', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ backups: [pathStr] }) });
+      if (r.ok) { showToast((r.lines && r.lines[0]) || '已清理', 'success'); loadSkills(); }
+      else showToast(r.error || '清理失败', 'error');
+    }
+  } catch (e) { showToast('修复失败: ' + e.message, 'error'); }
+}
+async function doFixDescription(pathStr) {
+  const desc = document.getElementById('fixDescInput').value.trim();
+  const d = window._genericSkillData;
+  if (!desc) { showToast('描述不能为空', 'error'); return; }
+  const fm = Object.assign({}, d.frontmatter || {});
+  fm.name = d.name; fm.description = desc;
+  const content = assembleSkillRaw(fm, d.body || '');
+  try {
+    const r = await api('/api/skills/update', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: pathStr, content }) });
+    showToast(r.ok ? '已补充描述' : '保存失败: ' + r.error, r.ok ? 'success' : 'error');
+    if (r.ok) { closeGeneric(); loadSkills(); }
+  } catch (e) { showToast('保存失败: ' + e.message, 'error'); }
 }
 function toggleProjectInput() {
   document.getElementById('projectPickWrap').style.display =
@@ -2131,7 +2228,25 @@ function renderGenericProblems(containerId, problems, prefix) {
         ${p.detail ? `<div class="p-detail">${escapeHtml(p.detail)}</div>` : ''}
       </div>
       ${p.action && p.path ? `<button class="btn sm" style="color:var(--primary);border-color:var(--primary)" onclick="fixHarnessIssue('${escapeHtml(p.path)}', '${p.action}', this)">🔧 修复</button>` : ''}
+      ${p.fixable ? `<button class="btn sm" style="color:var(--primary);border-color:var(--primary)" onclick="fixSkillIssue('${escapeHtml(p.path)}', '${p.fixable}', this)">🔧 修复</button>` : ''}
     </div>`).join('') + '</div>';
+}
+/* 复制文本工具 */
+function copyText(text, label) {
+  const done = () => showToast(label + ' 已复制', 'success');
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(done, () => {
+      const ta = document.createElement('textarea');
+      ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+      document.body.appendChild(ta); ta.select();
+      try { document.execCommand('copy'); ta.remove(); done(); } catch (e) { ta.remove(); showToast('复制失败', 'error'); }
+    });
+  } else {
+    const ta = document.createElement('textarea');
+    ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta); ta.select();
+    try { document.execCommand('copy'); ta.remove(); done(); } catch (e) { ta.remove(); showToast('复制失败', 'error'); }
+  }
 }
 
 /* ================================================================
@@ -2192,10 +2307,10 @@ function renderEnvProblems(problems) {
     </div>`).join('');
 }
 
+const TOOL_ICO = { claude:'/logos/claude.png', codex:'/logos/codex.png', pi:'/logos/pi.png', kimi:'/logos/kimi.png', orca:'/logos/orca.png', hermes:'/logos/hermes.png', aider:'/logos/aider.png', gemini:'/logos/gemini.png', qwen:'/logos/qwen.png' };
+const icoTag = t => TOOL_ICO[t.id] ? `<img class="env-ico-img" src="${TOOL_ICO[t.id]}" alt="" onerror="this.style.display='none'">` : '<span class="env-ico">🧩</span>';
 function renderEnvTools(tools) {
   const el = document.getElementById('envTools');
-  const TOOL_ICO = { claude:'/logos/claude.png', codex:'/logos/codex.png', pi:'/logos/pi.png', kimi:'/logos/kimi.png', orca:'/logos/orca.png', hermes:'/logos/hermes.png', aider:'/logos/aider.png', gemini:'/logos/gemini.png', qwen:'/logos/qwen.png' };
-  const icoTag = t => TOOL_ICO[t.id] ? `<img class="env-ico-img" src="${TOOL_ICO[t.id]}" alt="" onerror="this.style.display='none'">` : '<span class="env-ico">🧩</span>';
   const installed = tools.filter(t => t.installed);
   const notInstalled = tools.filter(t => !t.installed);
   let html = '';

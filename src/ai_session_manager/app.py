@@ -1845,6 +1845,13 @@ class Handler(BaseHTTPRequestHandler):
             data = self._json_body()
             r = skills_mod.skill_delete(data.get("path", ""))
             self._json_response(r, 200 if r.get("ok") else 400)
+        elif parsed.path == "/api/skills/cleanup":
+            if env_mod.admin_write_error():
+                self._json_response({"ok": False, "error": env_mod.admin_write_error()}, 200)
+                return
+            data = self._json_body()
+            r = skills_mod.skill_cleanup(data.get("emptydirs"), data.get("backups"))
+            self._json_response(r, 200)
         elif parsed.path == "/api/harness/fix":
             data = self._json_body()
             r = harness_mod.harness_fix(data.get("path", ""), data.get("action", ""))
