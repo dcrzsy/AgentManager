@@ -1847,6 +1847,17 @@ class Handler(BaseHTTPRequestHandler):
             self.send_error(404)
 
 
+def _is_existing_agent(host, port):
+    """目标端口是否已被 Agent 管理器实例占用（HTTP 探活）"""
+    try:
+        import urllib.request
+        with urllib.request.urlopen(f"http://{host}:{port}/", timeout=2) as r:
+            html = r.read(3000).decode("utf-8", "ignore")
+            return "Agent 管理器" in html
+    except Exception:
+        return False
+
+
 def main(argv=None):
     import argparse
     parser = argparse.ArgumentParser(description="Agent 管理器", prog="Agent管理器")
@@ -1857,6 +1868,16 @@ def main(argv=None):
     args = parser.parse_args(argv)
 
     port = args.port
+    # 幂等：端口已有 Agent 管理器实例 → 打开浏览器访问已有实例并退出（避免重复启动/端口递增）
+    if _is_existing_agent(args.host, port):
+        print(f"已检测到 Agent 管理器运行中: http://{args.host}:{port}，直接打开")
+        if not args.no_browser:
+            import webbrowser
+            try:
+                webbrowser.open(f"http://{args.host}:{port}")
+            except Exception:
+                pass
+        sys.exit(0)
     server = None
     for p in range(port, port + 10):
         try:
