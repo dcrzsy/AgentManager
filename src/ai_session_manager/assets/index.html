@@ -702,7 +702,7 @@ tbody tr:hover .op-cell .op-preview, tr.selected .op-cell .op-preview { visibili
         <h2>🖥️ 环境检测</h2>
         <span class="view-sub">检测已安装工具、版本、多版本冲突与可用更新（升级需确认后执行）</span>
         <span class="spacer" style="flex:1"></span>
-        <button class="btn sm" onclick="loadEnv(true)" title="重新检测所有工具">🔄 重新检测</button>
+        <button class="btn sm" id="envScanBtn" onclick="loadEnv(true)" title="重新检测所有工具">🔄 重新检测</button>
         <button class="btn sm" onclick="openUpgradeHistory()" title="查看升级记录">🗂 升级历史</button>
       </div>
       <div class="stats-row">
@@ -2053,6 +2053,8 @@ let envCache = null;
 let envUpgradeTimers = {};
 
 async function loadEnv(force) {
+  const scanBtn = document.getElementById('envScanBtn');
+  if (scanBtn) { scanBtn.disabled = true; scanBtn.textContent = '⏳ 检测中…'; }
   document.getElementById('envTools').innerHTML = '<div class="card skeleton">' + Array.from({ length: 4 }, () =>
     '<div class="sk-row"><div class="sk" style="flex:1"></div><div class="sk" style="flex:2"></div><div class="sk" style="width:100px"></div></div>').join('') + '</div>';
   try {
@@ -2073,6 +2075,8 @@ async function loadEnv(force) {
     renderEnvTools(d.tools);
   } catch (e) {
     document.getElementById('envTools').innerHTML = '<div class="empty-state"><div class="e-title">检测失败</div><div class="e-hint">' + escapeHtml(e.message) + '</div></div>';
+  } finally {
+    if (scanBtn) { scanBtn.disabled = false; scanBtn.textContent = '🔄 重新检测'; }
   }
 }
 

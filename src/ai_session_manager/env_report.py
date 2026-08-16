@@ -26,7 +26,7 @@ TOOLS = {
         "config": [HOME / ".claude", HOME / ".claude.json"],
         "upgrade_cmd": "npm install -g --allow-scripts=@anthropic-ai/claude-code @anthropic-ai/claude-code@latest",
         "upgrade_via": "npm 全局包",
-        "run_proc": ["claude"],
+        "run_proc": [r"claude-code", r"/claude(?:\s|$)"],
     },
     "codex": {
         "name": "Codex",
@@ -36,7 +36,7 @@ TOOLS = {
         "config": [HOME / ".codex"],
         "upgrade_cmd": "npm install -g @openai/codex@latest",
         "upgrade_via": "npm 全局包",
-        "run_proc": ["codex"],
+        "run_proc": [r"codex"],
     },
     "pi": {
         "name": "Pi",
@@ -46,7 +46,7 @@ TOOLS = {
         "config": [HOME / ".pi"],
         "upgrade_cmd": "npm install -g @earendil-works/pi-coding-agent@latest",
         "upgrade_via": "npm 全局包",
-        "run_proc": ["pi"],
+        "run_proc": [r"pi-coding-agent", r"/pi(?:\s|$)"],
     },
     "kimi": {
         "name": "Kimi Code",
@@ -67,7 +67,7 @@ TOOLS = {
         "config": [HOME / ".config" / "orca"],
         "upgrade_cmd": None,
         "upgrade_via": "桌面应用（官方渠道更新）",
-        "run_proc": ["orca-ide", "daemon-entry"],
+        "run_proc": [r"orca-ide", r"daemon-entry"],
     },
     "hermes": {
         "name": "Hermes",
@@ -97,7 +97,7 @@ TOOLS = {
         "config": [HOME / ".gemini"],
         "upgrade_cmd": "npm install -g @google/gemini-cli@latest",
         "upgrade_via": "npm 全局包",
-        "run_proc": ["gemini"],
+        "run_proc": [r"gemini"],
     },
     "qwen": {
         "name": "Qwen Code",
@@ -121,6 +121,7 @@ _upgrade_lock = threading.Lock()
 # npm view 结果缓存（10 分钟内不重复联网查询）
 _npm_view_cache = {}
 _NPM_VIEW_TTL = 600
+_npm_view_lock = threading.Lock()
 
 
 def _npm_latest(pkg):
@@ -128,12 +129,21 @@ def _npm_latest(pkg):
     if not pkg:
         return None
     now = time.time()
-    cached = _npm_view_cache.get(pkg)
-    if cached and now - cached[1] < _NPM_VIEW_TTL:
-        return cached[0]
+    with _npm_view_lock:
+        cached = _npm_view_cache.get(pkg)
+        if cached and now - cached[1] < _NPM_VIEW_TTL:
+            return cached[0]
     code, out = _run(["npm", "view", pkg, "version"], timeout=8)
-    latest = out.strip().splitlines()[-1][:30] if code == 0 and out.strip() else None
-    _npm_view_cache[pkg] = (latest, now)
+    latest = None
+    if code == 0 and out.strip():
+        # 取最后一行含版本号的行（npm 可能输出 warning 行）
+        for line in reversed(out.splitlines()):
+            line = line.strip()
+            if re.search(r"\d+\.\d+\.\d+", line):
+                latest = line[:30]
+                break
+    with _npm_view_lock:
+        _npm_view_cache[pkg] = (latest, now)
     return latest
 
 UPGRADE_HISTORY_FILE = HOME / ".agent-manager" / "upgrade-history.json"
@@ -212,7 +222,7 @@ def _extract_version(raw):
     """从命令输出提取版本号；无合法版本号返回空串"""
     if not raw:
         return ""
-    m = re.search(r"\bv?\d+\.\d+\.\d+(?:[-+][\w.-]+)?\b", raw)
+    m = re.search(r"\b[vV]?\d+\.\d+\.\d+(?:[-+][\w.-]+)?\b", raw)
     candidate = (m.group(0) if m else "").lstrip("vV")
     # 排除常见错误文本伪装（含 error/not installed 等关键字时丢弃）
     lower = raw.lower()
@@ -270,23 +280,42 @@ def _which_all(cmd):
 
 
 def _is_running(procs):
+    """进程是否在运行。用 ps -eo args 匹配命令行（node 脚本进程 comm 是 node，
+    必须匹配 args 中的工具路径/名称，如 node /path/to/claude-code/cli.js）。
+    procs 元素为正则片段（如 "claude-code"、r"/pi(?:\\s|$)"）"""
     try:
-        r = subprocess.run(
-            ["ps", "-eo", "comm"], capture_output=True, text=True, timeout=5
-        )
-        names = set(r.stdout.split())
-        return any(p in names for p in procs)
+        r = subprocess.run(["ps", "-eo", "args"], capture_output=True, text=True, timeout=5)
+        for line in r.stdout.splitlines():
+            for pat in procs:
+                if re.search(pat, line):
+                    return True
     except Exception:
-        return False
+        pass
+    return False
 
 
-def _npm_global_version(pkg):
-    """npm ls -g 中的已装版本"""
+_npm_gv_cache = {}
+_NPM_GV_TTL = 60
+_npm_gv_lock = threading.Lock()
+
+
+def _npm_global_version(pkg, use_cache=True):
+    """npm ls -g 中的已装版本（60s 缓存）"""
     if not pkg:
         return None
+    if use_cache:
+        now = time.time()
+        with _npm_gv_lock:
+            cached = _npm_gv_cache.get(pkg)
+            if cached and now - cached[1] < _NPM_GV_TTL:
+                return cached[0]
     code, out = _run(["npm", "ls", "-g", "--depth=0", pkg], timeout=12)
     m = re.search(rf"{re.escape(pkg)}@([\d.]+)", out)
-    return m.group(1) if m else None
+    gv = m.group(1) if m else None
+    if use_cache:
+        with _npm_gv_lock:
+            _npm_gv_cache[pkg] = (gv, time.time())
+    return gv
 
 
 def env_report():
@@ -318,8 +347,12 @@ def env_report():
     except Exception:
         disk_free = None
 
-    for tid, meta in TOOLS.items():
+    from concurrent.futures import ThreadPoolExecutor
+
+    def _scan_one(tid_meta):
+        tid, meta = tid_meta
         inst = {"id": tid, "name": meta["name"], "installed": False}
+        problems_i = []
 
         # 所有二进制实例
         bins = []
@@ -343,7 +376,7 @@ def env_report():
                 if v:
                     versions.add(v)
         if version_output_issues:
-            problems.append({
+            problems_i.append({
                 "tool": tid, "level": "error",
                 "message": f"{meta['name']} CLI 版本输出异常（可能是安装脚本未执行或安装损坏）",
                 "detail": "；".join(version_output_issues[:3]) + "。npm 全局包可尝试带 --allow-scripts 重新安装",
@@ -362,13 +395,13 @@ def env_report():
 
         # 多版本冲突
         if len(versions) > 1:
-            problems.append({
+            problems_i.append({
                 "tool": tid, "level": "warn",
                 "message": f"{meta['name']} 检测到 {len(bins)} 个安装实例且版本不一致",
                 "detail": "；".join(f"{b['path']} ({b['version'] or '未知'})" for b in bins),
             })
         elif len(bins) > 1:
-            problems.append({
+            problems_i.append({
                 "tool": tid, "level": "info",
                 "message": f"{meta['name']} 存在 {len(bins)} 个二进制实例（版本一致）",
                 "detail": "；".join(b["path"] for b in bins),
@@ -382,7 +415,7 @@ def env_report():
             inst["npm_latest_version"] = latest
             inst["has_update"] = bool(latest and gv and version_gt(latest, gv))
             if inst["has_update"]:
-                problems.append({
+                problems_i.append({
                     "tool": tid, "level": "update",
                     "message": f"{meta['name']} 有可用更新：当前 {gv} → 最新 {latest}",
                     "detail": f"升级命令：{meta['upgrade_cmd']}",
@@ -393,7 +426,12 @@ def env_report():
             if latest:
                 inst["not_installed_latest"] = latest
                 inst["has_install"] = True
-        tools_out.append(inst)
+        return inst, problems_i
+
+    with ThreadPoolExecutor(max_workers=6) as pool:
+        for inst, probs in pool.map(_scan_one, TOOLS.items()):
+            tools_out.append(inst)
+            problems.extend(probs)
 
     # pi 扩展完整性
     for path, desc in PI_EXT_CHECKS:
