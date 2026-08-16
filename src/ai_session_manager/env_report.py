@@ -173,6 +173,8 @@ def _save_history(items):
     try:
         UPGRADE_HISTORY_FILE.parent.mkdir(parents=True, exist_ok=True)
         UPGRADE_HISTORY_FILE.write_text(json.dumps(items, ensure_ascii=False, indent=2), encoding="utf-8")
+        ensure_owner(UPGRADE_HISTORY_FILE)
+        ensure_owner(UPGRADE_HISTORY_FILE.parent)
     except Exception:
         pass
 
@@ -340,6 +342,112 @@ _npm_gv_lock = threading.Lock()
 
 
 _env_scan_cache = None
+
+
+def _is_admin():
+    """是否以管理员(root)权限运行"""
+    try:
+        return os.geteuid() == 0
+    except Exception:
+        return False
+
+
+_REAL_USER = None
+
+
+def _real_user():
+    """管理员模式下的真实用户（passwd 中 uid!=0 且 uid 最小的常规用户）"""
+    global _REAL_USER
+    if not _is_admin():
+        return None
+    if _REAL_USER is not None:
+        return _REAL_USER
+    try:
+        import pwd
+        for pw in pwd.getpwall():
+            if pw.pw_uid == 1000:
+                _REAL_USER = pw
+                return pw
+        for pw in pwd.getpwall():
+            if 1000 <= pw.pw_uid < 60000:
+                _REAL_USER = pw
+                return pw
+    except Exception:
+        pass
+    return None
+
+
+def _real_user_home():
+    """真实用户 HOME：管理员模式下 HOME 可能是 /root，尝试从 passwd 推断实际用户"""
+    if not _is_admin():
+        return HOME
+    try:
+        pw = _real_user()
+        if pw:
+            return Path(pw.pw_dir)
+    except Exception:
+        pass
+    return HOME
+
+
+def ensure_owner(path):
+    """管理员模式下，把真实用户 HOME 下新建/修改的文件/目录属主改回真实用户
+    （避免 root 写入导致用户之后无法修改/删除）"""
+    try:
+        if not _is_admin():
+            return
+        pw = _real_user()
+        if not pw:
+            return
+        p = Path(path)
+        real_home = Path(pw.pw_dir)
+        if not str(p).startswith(str(real_home)):
+            return
+        os.chown(p, pw.pw_uid, pw.pw_gid)
+        if p.is_dir():
+            for sub in p.rglob("*"):
+                try:
+                    os.chown(sub, pw.pw_uid, pw.pw_gid)
+                except Exception:
+                    pass
+    except Exception:
+        pass
+
+
+def admin_write_error():
+    """管理员模式未保留用户 HOME 时的写操作拦截信息（None=可写）"""
+    if _is_admin() and str(HOME).startswith("/root"):
+        real = _real_user_home()
+        if real != HOME:
+            return ("管理员模式未保留用户 HOME（当前 HOME=" + str(HOME) + "）。"
+                    "写操作会进入 root 环境。请用「sudo --preserve-env=HOME 启动」后重试")
+    return None
+
+
+def _permission_issues():
+    """扫描关键目录可读性，返回无权限问题列表（避免静默漏扫）"""
+    issues = []
+    checked = []
+    # 系统级全局目录
+    for d in ("/usr/lib/node_modules", "/usr/local/lib/node_modules",
+              "/opt/node_modules", "/usr/lib/nodejs"):
+        p = Path(d)
+        if p.exists() and not os.access(p, os.R_OK):
+            issues.append(f"{d}（无读取权限）")
+        elif p.exists():
+            checked.append(d)
+    # root 环境（管理员/root 组用户可读时检查）
+    root_home = Path("/root")
+    if root_home.exists() and not os.access(root_home, os.R_OK):
+        issues.append("/root（无读取权限，root 用户安装的工具可能漏检）")
+    elif root_home.exists():
+        checked.append("/root")
+    # 各 node 环境的 lib/node_modules
+    for name, e in _node_envs().items():
+        nm = Path(e["dir"]) / "lib" / "node_modules"
+        if nm.exists() and not os.access(nm, os.R_OK):
+            issues.append(f"{nm}（{name} 环境无读取权限）")
+    return issues, checked
 
 
 def _node_envs():
@@ -619,6 +727,22 @@ def env_report():
     # 跨环境 npm 包版本诊断（升级错位检测）
     problems.extend(_env_diagnostics())
 
+    # 权限诊断（避免无权限静默漏扫）
+    perm_issues, _ = _permission_issues()
+    if perm_issues:
+        problems.append({
+            "tool": "system", "level": "warn",
+            "message": "以下目录无读取权限，可能漏检其中安装的工具（建议管理员权限运行）",
+            "detail": "；".join(perm_issues[:6]),
+        })
+    # 管理员模式 + HOME 错配检测
+    if _is_admin() and str(HOME).startswith("/root"):
+        problems.append({
+            "tool": "system", "level": "warn",
+            "message": "管理员模式但 HOME 指向 /root（未保留用户环境），检测到的是 root 环境而非您的环境",
+            "detail": f"请用「sudo --preserve-env=HOME 启动」以检测 /home/dcrzsy 环境（当前 HOME={HOME}）",
+        })
+
     report = {
         "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "system": {
@@ -640,6 +764,9 @@ def env_report():
                         and ((t["installed"] and t.get("has_update")) or (not t["installed"] and t.get("has_install")))],
         "uninstallable": [t["id"] for t in tools_out
                           if UNINSTALL_CMDS.get(t["id"]) and t["installed"]],
+        "admin": _is_admin(),
+        "real_user_home": str(_real_user_home()),
+        "permission_issues": [i for i, _ in _permission_issues()][:8],
     }
     return report
 

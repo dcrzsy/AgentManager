@@ -1744,6 +1744,9 @@ class Handler(BaseHTTPRequestHandler):
             orca_removed = clean_orca_state_db()
             self._json_response({"kimi_removed": kimi_removed, "codex_removed": codex_removed, "orca_removed": orca_removed})
         elif parsed.path == "/api/trash/restore":
+            if env_mod.admin_write_error():
+                self._json_response({"ok": False, "error": env_mod.admin_write_error()}, 200)
+                return
             data = self._json_body()
             ids = data.get("ids", []) if isinstance(data.get("ids"), list) else []
             restored, failed = [], []
@@ -1758,6 +1761,9 @@ class Handler(BaseHTTPRequestHandler):
                     failed.append({"id": item_id, "error": err})
             self._json_response({"restored": restored, "failed": failed})
         elif parsed.path == "/api/trash/delete":
+            if env_mod.admin_write_error():
+                self._json_response({"ok": False, "error": env_mod.admin_write_error()}, 200)
+                return
             data = self._json_body()
             ids = data.get("ids", []) if isinstance(data.get("ids"), list) else []
             deleted, failed = [], []
@@ -1772,6 +1778,9 @@ class Handler(BaseHTTPRequestHandler):
                     failed.append({"id": item_id, "error": err})
             self._json_response({"deleted": deleted, "failed": failed})
         elif parsed.path == "/api/trash/empty":
+            if env_mod.admin_write_error():
+                self._json_response({"ok": False, "error": env_mod.admin_write_error()}, 200)
+                return
             count = empty_trash()
             self._json_response({"removed": count})
         # ---------- Harness 配置管理 ----------
@@ -1789,14 +1798,23 @@ class Handler(BaseHTTPRequestHandler):
             self._json_response(r, 200 if r.get("ok") else 400)
         # ---------- Skill 管理 ----------
         elif parsed.path == "/api/skills/create":
+            if env_mod.admin_write_error():
+                self._json_response({"ok": False, "error": env_mod.admin_write_error()}, 200)
+                return
             data = self._json_body()
             r = skills_mod.skill_create(data.get("name", ""), data.get("description", ""), data.get("content", ""), data.get("scope", "user"))
             self._json_response(r, 200 if r.get("ok") else 400)
         elif parsed.path == "/api/skills/update":
+            if env_mod.admin_write_error():
+                self._json_response({"ok": False, "error": env_mod.admin_write_error()}, 200)
+                return
             data = self._json_body()
             r = skills_mod.skill_update(data.get("path", ""), data.get("content", ""))
             self._json_response(r, 200 if r.get("ok") else 400)
         elif parsed.path == "/api/skills/delete":
+            if env_mod.admin_write_error():
+                self._json_response({"ok": False, "error": env_mod.admin_write_error()}, 200)
+                return
             data = self._json_body()
             r = skills_mod.skill_delete(data.get("path", ""))
             self._json_response(r, 200 if r.get("ok") else 400)
@@ -1805,6 +1823,9 @@ class Handler(BaseHTTPRequestHandler):
             r = harness_mod.harness_fix(data.get("path", ""), data.get("action", ""))
             self._json_response(r, 200 if r.get("ok") else 400)
         elif parsed.path == "/api/env/upgrade":
+            if env_mod.admin_write_error():
+                self._json_response({"ok": False, "error": env_mod.admin_write_error()}, 200)
+                return
             data = self._json_body()
             if not isinstance(data.get("tool"), str) or not data["tool"]:
                 self._json_response({"ok": False, "error": "缺少 tool 参数"}, 400)
@@ -1813,6 +1834,9 @@ class Handler(BaseHTTPRequestHandler):
             # 业务性拒绝（已最新/不支持/进行中）返回 200，便于前端直接展示 error 文案
             self._json_response(r, 200)
         elif parsed.path == "/api/env/uninstall":
+            if env_mod.admin_write_error():
+                self._json_response({"ok": False, "error": env_mod.admin_write_error()}, 200)
+                return
             data = self._json_body()
             if not isinstance(data.get("tool"), str) or not data["tool"]:
                 self._json_response({"ok": False, "error": "缺少 tool 参数"}, 400)

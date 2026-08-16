@@ -738,6 +738,8 @@ tbody tr:hover .op-cell .op-preview, tr.selected .op-cell .op-preview { visibili
         <span style="font-size:12px;color:var(--muted)">🌐 代理：<b id="envProxy" style="font-family:var(--mono);font-size:11.5px">无</b></span>
         <span style="font-size:12px;color:var(--muted)">💿 磁盘剩余：<b id="envDisk" style="font-family:var(--mono);font-size:11.5px">-</b></span>
         <span style="font-size:12px;color:var(--faint)">影响升级是否走镜像 / 能否成功</span>
+        <span id="envAdminBadge" style="display:none;font-size:11.5px;font-weight:600;padding:2px 8px;border-radius:10px;background:#d93848;color:#fff">🛡️ 管理员模式</span>
+        <span id="envPermHint" style="display:none;font-size:11.5px;color:var(--warn)">⚠️ 部分目录无权限</span>
       </div>
       <div id="envProblemsPanel"></div>
       <div id="envTools"></div>
@@ -2075,6 +2077,11 @@ async function loadEnv(force) {
     document.getElementById('envDisk').textContent = d.system.disk_free_human || '未知';
     renderEnvProblems(d.problems);
     renderEnvTools(d.tools);
+    const adminBadge = document.getElementById('envAdminBadge');
+    if (adminBadge) adminBadge.style.display = d.admin ? 'inline-block' : 'none';
+    const permHint = document.getElementById('envPermHint');
+    if (permHint) permHint.style.display = (d.permission_issues && d.permission_issues.length) ? 'inline-block' : 'none';
+    if (permHint) permHint.title = (d.permission_issues || []).join('；');
   } catch (e) {
     document.getElementById('envTools').innerHTML = '<div class="empty-state"><div class="e-title">检测失败</div><div class="e-hint">' + escapeHtml(e.message) + '</div></div>';
   } finally {
@@ -2129,6 +2136,7 @@ function renderEnvTools(tools) {
         <span class="spacer"></span>
         ${envCache.upgradeable.includes(t.id) ? `<button class="btn sm primary" onclick="openUpgrade('${t.id}')">⬆️ 升级</button>` : (t.npm_pkg ? '<span style="font-size:11px;color:var(--faint)">npm: ' + escapeHtml(t.npm_pkg) + '</span>' : '')}
         ${envCache.uninstallable.includes(t.id) ? `<button class="btn sm danger" onclick="uninstallTool('${t.id}')" title="卸载 ${escapeHtml(t.name)}">🗑️ 卸载</button>` : ''}
+        ${envCache.admin && t.npm_pkg ? `<span style="font-size:10.5px;color:var(--warn)" title="管理员模式下升级/卸载可能改变文件属主，建议普通模式操作">⚠️ 建议普通模式</span>` : ''}
       </div>
       <div class="env-bin">${bins}</div>
       ${t.config_dir ? `<div class="env-config">配置目录：${escapeHtml(t.config_dir.replace(HOME_DIR, '~'))}</div>` : ''}

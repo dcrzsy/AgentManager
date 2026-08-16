@@ -10,6 +10,8 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
+from .env_report import admin_write_error, ensure_owner
+
 HOME = Path.home()
 PI_AGENT_DIR = HOME / ".pi" / "agent"
 
@@ -211,6 +213,8 @@ def skill_projects():
 
 def skill_create(name, description, content, scope="user"):
     """新建 skill：生成 <root>/<name>/SKILL.md"""
+    if admin_write_error():
+        return {"ok": False, "error": admin_write_error()}
     name = name.strip()
     if not name or not re.fullmatch(r"[A-Za-z0-9._-]+", name):
         return {"ok": False, "error": "名称只能包含字母、数字、._-"}
@@ -236,6 +240,7 @@ def skill_create(name, description, content, scope="user"):
         dest.mkdir(parents=True, exist_ok=True)
         md = f"---\nname: {name}\ndescription: {description or name}\n---\n\n{content}\n"
         (dest / "SKILL.md").write_text(md, encoding="utf-8")
+        ensure_owner(dest)
         return {"ok": True, "path": str(dest), "name": name}
     except Exception as e:
         return {"ok": False, "error": str(e)}
@@ -243,6 +248,8 @@ def skill_create(name, description, content, scope="user"):
 
 def skill_update(path_str, content):
     """更新 SKILL.md（保留 frontmatter 或整体替换）"""
+    if admin_write_error():
+        return {"ok": False, "error": admin_write_error()}
     d = Path(path_str).expanduser()
     skill_file = d / "SKILL.md" if d.is_dir() else Path(path_str)
     if not skill_file.is_file():
@@ -257,6 +264,8 @@ def skill_update(path_str, content):
     try:
         shutil.copy2(skill_file, bak)
         skill_file.write_text(content, encoding="utf-8")
+        ensure_owner(skill_file)
+        ensure_owner(bak)
         return {"ok": True, "backup": str(bak)}
     except Exception as e:
         return {"ok": False, "error": str(e)}
@@ -331,6 +340,8 @@ def skills_diagnostics():
 
 def skill_delete(path_str):
     """删除 skill 目录（移入回收站）"""
+    if admin_write_error():
+        return {"ok": False, "error": admin_write_error()}
     d = Path(path_str).expanduser()
     root = d.parent
     # 安全检查：必须位于 skills 根下
