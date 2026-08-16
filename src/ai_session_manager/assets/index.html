@@ -603,6 +603,11 @@ tbody tr:hover .op-cell .op-preview, tr.selected .op-cell .op-preview { visibili
         <h2>⚙️ Harness 配置管理</h2>
         <span class="view-sub" id="harnessRoot"></span>
       </div>
+      <div class="card" style="padding:10px 14px;margin-bottom:12px;display:flex;align-items:center;gap:10px;flex-wrap:wrap" id="harnessTabBar">
+        <span class="f-label">按 Harness 分类</span>
+        <div class="seg" id="harnessToolTabs"></div>
+        <span style="font-size:11.5px;color:var(--faint)" id="harnessTabCount"></span>
+      </div>
       <div id="harnessHealth"></div>
       <div id="harnessProblems"></div>
       <div class="harness-layout">
@@ -822,6 +827,8 @@ let currentPreviewData = null, currentPreviewTab = 'conversation';
 
 /* 各视图数据缓存 */
 let harnessFilesCache = null, harnessSelectedFile = null, harnessEditMode = false;
+let harnessActiveTools = [];
+let harnessToolFilter = 'all';
 let skillsCache = null;
 let mcpCache = null;
 
@@ -1510,6 +1517,10 @@ function closeModal() { document.getElementById('previewModal').classList.remove
 /* ================================================================
    Harness 配置管理
    ================================================================ */
+document.getElementById('harnessToolTabs').addEventListener('click', e => {
+  const b = e.target.closest('button[data-tool]');
+  if (b) switchHarnessTool(b.dataset.tool);
+});
 async function loadHarness(force = false) {
   const rootEl = document.getElementById('harnessRoot');
   if (force || !harnessFilesCache) {
@@ -1517,8 +1528,10 @@ async function loadHarness(force = false) {
     try {
       const data = await api('/api/harness/list');
       harnessFilesCache = data.items || [];
-      rootEl.textContent = '管理目录：' + data.root;
+      harnessActiveTools = data.tools || [];
+      rootEl.textContent = '共 ' + harnessActiveTools.length + ' 个 Harness · ' + data.items.filter(f => !f.is_backup).length + ' 个配置文件';
       document.getElementById('navHarnessBadge').textContent = harnessFilesCache.filter(f => !f.is_backup).length;
+      renderHarnessToolTabs();
       renderHarnessFiles();
       loadHarnessHealth();
     } catch (e) {
@@ -1527,24 +1540,49 @@ async function loadHarness(force = false) {
   }
   if (harnessSelectedFile) openHarnessFile(harnessSelectedFile);
 }
+function renderHarnessToolTabs() {
+  const el = document.getElementById('harnessToolTabs');
+  if (!el) return;
+  const counts = {};
+  (harnessFilesCache || []).forEach(f => { if (!f.is_backup) counts[f.tool] = (counts[f.tool] || 0) + 1; });
+  const total = Object.values(counts).reduce((a, b) => a + b, 0);
+  let html = `<button data-tool="all" class="${harnessToolFilter === 'all' ? 'active' : ''}">全部 (${total})</button>`;
+  for (const t of harnessActiveTools) {
+    const n = counts[t.id] || 0;
+    if (n > 0) html += `<button data-tool="${escapeHtml(t.id)}" class="${harnessToolFilter === t.id ? 'active' : ''}">${escapeHtml(t.name)} (${n})</button>`;
+  }
+  el.innerHTML = html;
+  document.getElementById('harnessTabCount').textContent = harnessToolFilter === 'all'
+    ? '全部分类'
+    : '当前分类：' + ((harnessActiveTools.find(t => t.id === harnessToolFilter) || {}).name || harnessToolFilter);
+}
+function switchHarnessTool(toolId) {
+  harnessToolFilter = toolId;
+  renderHarnessToolTabs();
+  renderHarnessFiles();
+}
 function renderHarnessFiles() {
-  const items = (harnessFilesCache || []).filter(f => !f.is_backup);
+  const items = (harnessFilesCache || []).filter(f => !f.is_backup && (harnessToolFilter === 'all' || f.tool === harnessToolFilter));
+  // 分类组内再按工具排（多工具混排时先按 category 后按 tool）
   const cats = {};
   items.forEach(f => { (cats[f.category] = cats[f.category] || []).push(f); });
-  const ico = { json: '📋', md: '📝', txt: '📄', toml: '⚙️', yml: '⚙️' };
+  const ico = { json: '📋', md: '📝', txt: '📄', toml: '⚙️', yml: '⚙️', jsonl: '📜' };
   let html = '';
   for (const [cat, list] of Object.entries(cats)) {
+    list.sort((a, b) => a.tool_order - b.tool_order || a.name.localeCompare(b.name));
     html += `<div class="h-file-cat">${cat}</div>`;
     for (const f of list) {
       const cls = harnessSelectedFile === f.path ? 'active' : '';
+      const multiTool = harnessToolFilter === 'all';
       html += `<div class="h-file ${cls}" onclick="openHarnessFile('${escapeHtml(f.path)}')">
         <span class="h-ico">${ico[f.ext] || '📄'}</span>
+        ${multiTool ? `<span class="tool-chip" style="font-size:9.5px;background:var(--card-2);border:1px solid var(--border);border-radius:8px;padding:0 5px;color:var(--faint)">${escapeHtml(f.tool_name)}</span>` : ''}
         <span class="h-name">${escapeHtml(f.name)}</span>
         <span class="h-size">${f.size_human}</span>
       </div>`;
     }
   }
-  document.getElementById('harnessFiles').innerHTML = html || '<div class="empty-state"><div class="e-title">没有配置文件</div></div>';
+  document.getElementById('harnessFiles').innerHTML = html || '<div class="empty-state"><div class="e-title">该分类下没有配置文件</div><div class="e-hint">切换顶部工具分类查看其它 Harness。</div></div>';
 }
 async function loadHarnessHealth() {
   try {

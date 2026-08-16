@@ -36,7 +36,9 @@ HARNESS_TOOLS = {
         "roots": [HOME / ".claude"],
         "extra_files": [HOME / ".claude.json"],
         "skip": ["sessions", "projects", "history.jsonl", "shell-snapshots", "cache", "__pycache__",
-                 "downloads", "plugins", "statsig", "todos", "conversation-history", "agent-config"],
+                 "downloads", "plugins", "statsig", "todos", "conversation-history", "agent-config",
+                 ".last-update", ".sys1og", ".tmux", "README.md", ".gitignore", "config.json.bak",
+                 "resources", "install.log", "node_modules"],
         "categories": {
             "核心配置": ["settings.json", "settings.local.json", ".claude.json"],
             "Agent": ["agent-config"],
@@ -48,7 +50,8 @@ HARNESS_TOOLS = {
         "name": "Codex",
         "roots": [HOME / ".codex"],
         "skip": ["sessions", "shell_snapshots", "cache", "__pycache__", "downloads", "logs", "plugins",
-                 "external_agent_session_imports.json", "chrome-native-hosts-v2.json", "watches", "tmp"],
+                 "external_agent_session_imports.json", "chrome-native-hosts-v2.json", "watches", "tmp",
+                 "README.md", ".gitignore", "state.db", "goals", "memories_", "queue_", "thread_history_", "logs_"],
         "categories": {
             "核心配置": ["config.toml", "config.local.json", "config.json"],
             "认证": ["auth.json"],
@@ -60,7 +63,8 @@ HARNESS_TOOLS = {
         "roots": [HOME / ".config" / "orca" / "codex-runtime-home" / "home",
                   HOME / ".config" / "orca" / "codex-runtime-home"],
         "skip": ["sessions", "shell_snapshots", "skills", "plugins", "cache", "tmp", "logs",
-                 "thread-writer-locks", "-wal", "-shm", "models_cache.json"],
+                 "thread-writer-locks", "-wal", "-shm", "models_cache.json", "README.md", ".gitignore",
+                 "goals_", "memories_", "queue_", "thread_history_", "thread-writer"],
         "categories": {
             "核心配置": ["config.toml", "config.toml.bak"],
             "认证": ["auth.json"],
@@ -71,7 +75,8 @@ HARNESS_TOOLS = {
     "kimi": {
         "name": "Kimi Code",
         "roots": [HOME / ".kimi-code"],
-        "skip": ["sessions", "user-history", "cache", "__pycache__", "server", "installer-logs"],
+        "skip": ["sessions", "user-history", "cache", "__pycache__", "server", "installer-logs",
+                 "README.md", ".gitignore", "bin", "node_modules"],
         "categories": {
             "核心配置": ["config.json", "migration-report.json"],
             "工作区": ["workspaces.json", "session_index.jsonl"],
@@ -81,7 +86,8 @@ HARNESS_TOOLS = {
     "hermes": {
         "name": "Hermes",
         "roots": [HOME / ".hermes"],
-        "skip": ["state.db", "-shm", "-wal", "cache", "logs", "runs", "downloads", "src", "node_modules"],
+        "skip": ["state.db", "-shm", "-wal", "cache", "logs", "runs", "downloads", "src", "node_modules",
+                 "README.md", ".gitignore", "bin", "web-ui", "desktop", "build", "vendor"],
         "categories": {
             "认证": ["auth.json"],
             "模型": ["models_dev_cache.json", "models_store.json", "provider_models_cache.json", "ollama_cloud_models_cache.json"],
