@@ -283,6 +283,7 @@ def _known_bin_dirs():
         if vers:
             dirs.append(str(vers[0] / "bin"))
     for d in (HOME / ".local" / "bin",
+              HOME / ".hermes" / "node" / "bin",   # hermes 自带 node 环境（升级常装到这里）
               HOME / ".kimi-code" / "bin",
               HOME / ".config" / "orca" / "linux-orca-cli-shim",
               HOME / ".npm-global" / "bin"):
@@ -325,6 +326,24 @@ def _is_running(procs):
 _npm_gv_cache = {}
 _NPM_GV_TTL = 60
 _npm_gv_lock = threading.Lock()
+
+
+def _primary_npm():
+    """主环境 npm 全路径：优先 nvm（用户终端环境），其次已知目录中的 npm。
+    避免从 orca/hermes 环境升级时装到 ~/.hermes/node 而主环境不生效"""
+    nvm = HOME / ".nvm" / "versions" / "node"
+    if nvm.is_dir():
+        vers = sorted((d for d in nvm.iterdir() if d.is_dir()),
+                      key=lambda d: d.name, reverse=True)
+        for v in vers:
+            npm = v / "bin" / "npm"
+            if npm.is_file():
+                return str(npm)
+    for d in _known_bin_dirs():
+        npm = Path(d) / "npm"
+        if npm.is_file() and str(npm).startswith(str(HOME)):
+            return str(npm)
+    return "npm"
 
 
 def _npm_global_version(pkg, use_cache=True):
@@ -550,6 +569,9 @@ def start_upgrade(tool_id):
     cmd = UPGRADE_CMDS.get(tool_id)
     if not cmd:
         return {"ok": False, "error": "该工具不支持自动升级，请走官方渠道"}
+    # npm 工具统一用主 npm，避免从 orca/hermes 环境启动时装到 ~/.hermes/node
+    if "npm install" in cmd and cmd.startswith("npm "):
+        cmd = cmd.replace("npm ", _primary_npm() + " ", 1)
     # 已是最新则明确告知（避免"点了升级没变化"的困惑）
     meta = TOOLS.get(tool_id)
     if meta and meta.get("npm_pkg"):
