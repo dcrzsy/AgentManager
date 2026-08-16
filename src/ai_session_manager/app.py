@@ -1676,6 +1676,8 @@ class Handler(BaseHTTPRequestHandler):
             self._json_response(skills_mod.skills_diagnostics())
         elif path == "/api/mcp/diagnostics":
             self._json_response(mcp_mod.mcp_diagnostics())
+        elif path == "/api/skills/projects":
+            self._json_response({"items": skills_mod.skill_projects()})
         elif path == "/api/skills/get":
             self._json_response(skills_mod.skill_get(qs.get("path", [""])[0]))
         # ---------- MCP 管理 ----------

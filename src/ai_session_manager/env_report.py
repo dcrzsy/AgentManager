@@ -24,7 +24,7 @@ TOOLS = {
         "version_args": ["--version"],
         "npm_pkg": "@anthropic-ai/claude-code",
         "config": [HOME / ".claude", HOME / ".claude.json"],
-        "upgrade_cmd": "npm update -g @anthropic-ai/claude-code",
+        "upgrade_cmd": "npm install -g --allow-scripts=@anthropic-ai/claude-code @anthropic-ai/claude-code@latest",
         "upgrade_via": "npm 全局包",
         "run_proc": ["claude"],
     },
@@ -34,7 +34,7 @@ TOOLS = {
         "version_args": ["--version"],
         "npm_pkg": "@openai/codex",
         "config": [HOME / ".codex"],
-        "upgrade_cmd": "npm update -g @openai/codex",
+        "upgrade_cmd": "npm install -g @openai/codex@latest",
         "upgrade_via": "npm 全局包",
         "run_proc": ["codex"],
     },
@@ -44,7 +44,7 @@ TOOLS = {
         "version_args": ["--version"],
         "npm_pkg": "@earendil-works/pi-coding-agent",
         "config": [HOME / ".pi"],
-        "upgrade_cmd": "npm update -g @earendil-works/pi-coding-agent",
+        "upgrade_cmd": "npm install -g @earendil-works/pi-coding-agent@latest",
         "upgrade_via": "npm 全局包",
         "run_proc": ["pi"],
     },
@@ -94,7 +94,7 @@ TOOLS = {
         "version_args": ["--version"],
         "npm_pkg": "@google/gemini-cli",
         "config": [HOME / ".gemini"],
-        "upgrade_cmd": "npm update -g @google/gemini-cli",
+        "upgrade_cmd": "npm install -g @google/gemini-cli@latest",
         "upgrade_via": "npm 全局包",
         "run_proc": ["gemini"],
     },
@@ -169,6 +169,19 @@ def _human_size(n):
             return f"{n:.1f} {unit}"
         n /= 1024
     return f"{n:.1f} PB"
+
+
+def _extract_version(raw):
+    """从命令输出提取版本号；无合法版本号返回空串"""
+    if not raw:
+        return ""
+    m = re.search(r"\bv?\d+\.\d+\.\d+(?:[-+][\w.-]+)?\b", raw)
+    candidate = (m.group(0) if m else "").lstrip("vV")
+    # 排除常见错误文本伪装（含 error/not installed 等关键字时丢弃）
+    lower = raw.lower()
+    if any(kw in lower for kw in ("error", "not installed", "not found", "command not", "cannot find", "failed")):
+        return ""
+    return candidate
 
 
 def _version_tuple(v):
@@ -284,13 +297,23 @@ def env_report():
         # 所有二进制实例
         bins = []
         versions = set()
+        version_output_issues = []
         for b in meta["bin"]:
             for p in _which_all(b):
                 code, out = _run([p, *meta["version_args"]], timeout=8)
-                v = out.strip().splitlines()[0][:40] if code == 0 and out.strip() else ""
+                raw = out.strip().splitlines()[0][:60] if out.strip() else ""
+                v = _extract_version(raw)
+                if raw and not v:
+                    version_output_issues.append(f"{p}: {raw}")
                 bins.append({"path": p, "version": v})
                 if v:
                     versions.add(v)
+        if version_output_issues:
+            problems.append({
+                "tool": tid, "level": "error",
+                "message": f"{meta['name']} CLI 版本输出异常（可能是安装脚本未执行或安装损坏）",
+                "detail": "；".join(version_output_issues[:3]) + "。npm 全局包可尝试带 --allow-scripts 重新安装",
+            })
 
         installed = bool(bins)
         inst["installed"] = installed
@@ -445,6 +468,30 @@ def start_upgrade(tool_id):
         task["output"] = "".join(chunks[-300:])
         task["done"] = True
         _record_history(tool_id, cmd, task.get("code"))
+        # 升级后自动验证：重读版本并对比
+        try:
+            meta = TOOLS.get(tool_id)
+            verify_lines = []
+            if meta:
+                for b in meta["bin"]:
+                    for p in _which_all(b):
+                        code, out = _run([p, *meta["version_args"]], timeout=10)
+                        raw = out.strip().splitlines()[0][:60] if out.strip() else ""
+                        v = _extract_version(raw)
+                        if code == 0:
+                            if v:
+                                verify_lines.append(f"版本验证: {b} → {v}")
+                            else:
+                                verify_lines.append(f"⚠️ 版本验证异常: {b} → {raw or '(无输出)'}（可能安装脚本未执行，试试带 --allow-scripts 重装）")
+                        else:
+                            verify_lines.append(f"⚠️ 版本命令失败({code}): {b}")
+                        break  # 每个 bin 名只验证第一个实例
+                    if verify_lines:
+                        break
+            if verify_lines:
+                task["output"] += "\n" + "\n".join(verify_lines)
+        except Exception:
+            pass
 
     threading.Thread(target=worker, daemon=True).start()
     return {"ok": True, "tool": tool_id, "command": cmd}

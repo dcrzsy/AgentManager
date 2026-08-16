@@ -332,6 +332,8 @@ tbody tr:hover .op-cell .op-preview, tr.selected .op-cell .op-preview { visibili
 [data-theme="dark"] .scope-badge.global { background: #123528; }
 .scope-badge.project { background: #fdf3e2; color: #b26a00; }
 [data-theme="dark"] .scope-badge.project { background: #3a2c10; }
+.scope-badge.memory { background: #ecebff; color: #6c5ce7; }
+[data-theme="dark"] .scope-badge.memory { background: #241f3a; }
 .fm-warn { color: var(--danger); font-size: 11px; }
 .skill-detail { padding: 16px; }
 .skill-detail pre { background: var(--card-2); border: 1px solid var(--border); border-radius: 10px; padding: 14px; overflow: auto; font-size: 12.5px; line-height: 1.6; max-height: 55vh; }
@@ -1819,7 +1821,19 @@ async function deleteSkill(pathStr, name) {
     },
   });
 }
+function toggleProjectInput() {
+  document.getElementById('projectPickWrap').style.display =
+    document.getElementById('newSkillScope').value === 'project' ? 'block' : 'none';
+}
+async function projectPick() {
+  try {
+    const d = await api('/api/skills/projects');
+    const sel = document.getElementById('newSkillProject');
+    sel.innerHTML = (d.items || []).map(p => `<option value="${escapeHtml(p.id)}">${escapeHtml(p.name)}${p.has_skills ? '' : '（无 skills 目录，将创建）'}</option>`).join('') || '<option value="">（无项目）</option>';
+  } catch (e) {}
+}
 function openSkillCreate() {
+  projectPick();
   const body = `
     <div class="skill-form">
       <label>名称（字母、数字、._-）</label>
@@ -1827,10 +1841,15 @@ function openSkillCreate() {
       <label>一句话描述</label>
       <input id="newSkillDesc" placeholder="何时使用这个 Skill">
       <label>存放位置（scope）</label>
-      <select id="newSkillScope">
+      <select id="newSkillScope" onchange="toggleProjectInput()">
         <option value="user">user — ~/.pi/agent/skills（个人用户级）</option>
         <option value="global">global — ~/.agents/skills（全局可移植）</option>
+        <option value="project">project — 项目记忆（projects-memory）</option>
       </select>
+      <div id="projectPickWrap" style="display:none">
+        <label>选择项目</label>
+        <select id="newSkillProject"></select>
+      </div>
       <label>SKILL.md 正文（会生成 frontmatter）</label>
       <textarea id="newSkillBody" spellcheck="false" placeholder="## When to Use
 …
@@ -1849,8 +1868,12 @@ function openSkillCreate() {
 async function createSkill() {
   const name = document.getElementById('newSkillName').value.trim();
   const desc = document.getElementById('newSkillDesc').value.trim();
-  const scope = document.getElementById('newSkillScope').value;
+  let scope = document.getElementById('newSkillScope').value;
   const content = document.getElementById('newSkillBody').value;
+  if (scope === 'project') {
+    scope = 'project:' + document.getElementById('newSkillProject').value;
+    if (scope === 'project:') { showToast('请选择项目', 'error'); return; }
+  }
   try {
     const r = await api('/api/skills/create', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -1868,8 +1891,12 @@ async function loadMcp() {
   document.getElementById('mcpContent').innerHTML = '<div class="card skeleton">' + Array.from({ length: 5 }, () =>
     '<div class="sk-row"><div class="sk" style="flex:1"></div><div class="sk" style="flex:3"></div></div>').join('') + '</div>';
   try {
-    const [data, diag] = await Promise.all([api('/api/mcp/servers'), api('/api/mcp/diagnostics')]);
-    renderGenericProblems('mcpProblems', diag.problems, 'M');
+    const data = await api('/api/mcp/servers');
+    // 诊断失败不阻塞主列表
+    try {
+      const diag = await api('/api/mcp/diagnostics');
+      renderGenericProblems('mcpProblems', diag.problems, 'M');
+    } catch (e) {}
     mcpCache = data;
     document.getElementById('mcpServerCount').textContent = num(data.total_servers);
     document.getElementById('mcpToolCount').textContent = num(data.total_tools);

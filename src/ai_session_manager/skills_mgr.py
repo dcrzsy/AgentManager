@@ -59,21 +59,53 @@ def _find_skill_dirs(root):
 
 
 def _parse_frontmatter(text):
-    """解析 SKILL.md 的 YAML frontmatter（宽松解析）"""
+    """解析 SKILL.md 的 YAML frontmatter（宽松解析）。
+
+    支持单行值、引号值与多行折叠块（>、>-、>|、|、|-）：
+        description: >-
+          Use Orca's CLI to ...
+          后续缩进行继续拼接
+    """
     fm = {}
     body = text
     m = re.match(r"^---\s*\n(.*?)\n---\s*\n?", text, re.S)
     if m:
         body = text[m.end():]
-        for line in m.group(1).splitlines():
+        lines = m.group(1).splitlines()
+        i = 0
+        while i < len(lines):
+            line = lines[i]
+            if not line.strip() or line.lstrip().startswith("#"):
+                i += 1
+                continue
             if ":" not in line:
+                i += 1
                 continue
             k, _, v = line.partition(":")
             k = k.strip()
-            v = v.strip().strip("'\"")
-            if v.startswith(">") or v.startswith("|"):
-                v = v[1:].strip()
+            v = v.strip()
+            # 多行折叠块：块标记后，收集后续比该行更深缩进的行
+            if v in (">", ">-", ">|", "|", "|-") or (v and v[0] in ">|" and len(v) <= 2):
+                block = []
+                indent = len(line) - len(line.lstrip())
+                j = i + 1
+                while j < len(lines):
+                    nxt = lines[j]
+                    if not nxt.strip():
+                        block.append("")
+                        j += 1
+                        continue
+                    if len(nxt) - len(nxt.lstrip()) <= indent and not nxt.strip().startswith(("  ", "\t")):
+                        break
+                    block.append(nxt.strip())
+                    j += 1
+                joined = " ".join(x for x in block if x).strip()
+                fm[k] = joined
+                i = j
+                continue
+            v = v.strip("'\"")
             fm[k] = v
+            i += 1
     return fm, body.strip()
 
 
@@ -165,6 +197,18 @@ def skill_get(path_str):
     }
 
 
+def skill_projects():
+    """可用的项目级 skills 根（projects-memory 下有 skills 目录的项目）"""
+    out = []
+    if _projects_memory.is_dir():
+        for proj in sorted(_projects_memory.iterdir()):
+            if (proj / "skills").is_dir() or proj.is_dir():
+                out.append({"id": proj.name, "name": proj.name,
+                            "has_skills": (proj / "skills").is_dir(),
+                            "path": str(proj / "skills")})
+    return out
+
+
 def skill_create(name, description, content, scope="user"):
     """新建 skill：生成 <root>/<name>/SKILL.md"""
     name = name.strip()
@@ -176,9 +220,14 @@ def skill_create(name, description, content, scope="user"):
     if scope == "global":
         root = HOME / ".agents" / "skills"
     elif scope.startswith("project:"):
-        root = _projects_memory / scope[len("project:"):] / "skills"
-    else:
+        proj_name = scope[len("project:"):]
+        root = _projects_memory / proj_name / "skills"
+        if not (_projects_memory / proj_name).is_dir():
+            return {"ok": False, "error": f"项目「{proj_name}」不存在于 projects-memory"}
+    elif scope == "user":
         root = PI_AGENT_DIR / "skills"
+    else:
+        return {"ok": False, "error": "scope 必须是 user / global / project:<名称>"}
     dest = root / name
     if dest.exists():
         return {"ok": False, "error": f"已存在同名 skill（{dest}）"}
@@ -198,6 +247,12 @@ def skill_update(path_str, content):
     skill_file = d / "SKILL.md" if d.is_dir() else Path(path_str)
     if not skill_file.is_file():
         return {"ok": False, "error": "SKILL.md 不存在"}
+    if not content or not content.strip():
+        return {"ok": False, "error": "内容不能为空"}
+    # frontmatter 结构提示（不阻断保存）
+    fm, _ = _parse_frontmatter(content)
+    if "name" not in fm:
+        return {"ok": False, "error": "内容缺少 frontmatter 的 name 字段（第一段 --- 块），请参考 ---\nname: xxx\ndescription: xxx\n--- 格式"}
     bak = skill_file.with_name("SKILL.md.bak." + datetime.now().strftime("%Y%m%d-%H%M%S"))
     try:
         shutil.copy2(skill_file, bak)
